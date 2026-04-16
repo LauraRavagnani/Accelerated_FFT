@@ -26,7 +26,7 @@ def plot_2D(file):
 		
 		x = [item['x'] for item in data]
 		y = [item['y'] for item in data]
-		Gxy = [item['Gxy'] for item in data]
+		Gxy = [item['z'] for item in data]
 
 		# plot
 		fig = plt.figure(figsize=(12, 8))
@@ -65,7 +65,7 @@ def plot_fft_2D(file):
 		
 		x = [item['x'] for item in data]
 		y = [item['y'] for item in data]
-		z = [item['mag'] for item in data]
+		z = [item['z'] for item in data]
 
 		fig = plt.figure(figsize=(12, 8))
 		ax = fig.add_subplot(111, projection='3d')
@@ -91,8 +91,8 @@ def plot_fft_2D(file):
 def main():
 	# plot_naive("Gx_vs_x.json")
 	# plot_fft("Gx_vs_x.json")
-	plot_2D("Gxy_vs_xy.json")
-	# plot_fft_2D("fft.json")
+	# plot_2D("Gxy_vs_xy.json")
+	plot_fft_2D("fft_prova.json")
 
 
 main()
