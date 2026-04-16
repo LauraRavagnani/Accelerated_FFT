@@ -91,8 +91,8 @@ def plot_fft_2D(file):
 def main():
 	# plot_naive("Gx_vs_x.json")
 	# plot_fft("Gx_vs_x.json")
-	# plot_2D("Gxy_vs_xy.json")
-	plot_fft_2D("fft.json")
+	plot_2D("Gxy_vs_xy.json")
+	# plot_fft_2D("fft.json")
 
 
 main()
