@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import json
 import numpy as np
+import pandas as pd
 
 def plot_naive(file):
 	# retrieve data
@@ -88,12 +89,46 @@ def plot_fft_2D(file):
 		plt.show()
 
 
-def main():
+def plot_benchmark_serial(file):
+	try:
+		df = pd.read_csv(file)
+	except Exception as e:
+		print(f"Error reading file: {e}")
+		return
+
+	x = np.arange(16, 4096)
+
+	# 2. Create the visualization
+	plt.figure(figsize=(10, 6))
+	plt.plot(df['N'], df['ExecutionTime'], 
+			marker='s',           # Square markers
+			linestyle='-',        # Solid line
+			color='#e74c3c',      # Red color
+			linewidth=2, 
+			label='FFT Execution Time')
+	plt.plot(x, 4.5e-8*x*x*np.log(x), 
+			linestyle='--',        # Solid line
+			color='blue',      # Red color
+			linewidth=2, 
+			label='O($N^2\log(N)$)')
+
+	# 3. Add labels and styling
+	plt.title('Algorithm Performance Analysis', fontsize=14)
+	plt.xlabel('Matrix Size (N)', fontsize=12)
+	plt.ylabel('Execution Time (seconds)', fontsize=12)
+	plt.grid(True, linestyle='--', alpha=0.7)
+	plt.legend()
+
+	# 4. Show the result	
+	plt.show()
+
+
+#def main():
 	# plot_naive("Gx_vs_x.json")
 	# plot_fft("Gx_vs_x.json")
 	# plot_2D("Gxy_vs_xy.json")
-	plot_fft_2D("fft_prova.json")
+	#plot_fft_2D("fft_prova.json")
 
 
-main()
+#main()
 

@@ -8,15 +8,22 @@
 
 
 
-int main(){
-	size_t N = 16;
-	size_t fx = 2;
-	size_t fy = 2;
+int main(int argc, char *argv[]){		// put the value of N when run
+	//size_t N = 1024;
+	size_t N = atoi(argv[1]);
+	size_t fx = 20;
+	size_t fy = 20;
 
 	double complex *col = (double complex*)malloc(N * sizeof(double complex));
 	double complex *X_kl = (double complex*)malloc(N * N * sizeof(double complex));
 	double *abs = (double*)malloc(N * N * sizeof(double));
 	double *grid_f = (double*)malloc(N * sizeof(double));
+
+	/*  
+	* Program main internal variables
+	*/
+	struct timespec start, t0, t1;
+	double elapsed = 0.0;
 
 
 	// create dataset
@@ -24,6 +31,8 @@ int main(){
 
 	// create json with dataset
 	create_json("Gxy_vs_xy.json", data.grid_x, data.grid_y, data.Gxy, N);
+
+	clock_gettime(CLOCK_MONOTONIC, &start);
 
 	// perform fft first on rows
 	for(int i=0; i < N; i++){
@@ -51,6 +60,12 @@ int main(){
 
 		free(X_l);
 	}
+
+
+
+	clock_gettime(CLOCK_MONOTONIC, &t1);
+	elapsed = get_elapsed_time(start, t1);
+	printf("Execution time (fft): %.6f seconds\n", elapsed);
 
 	for(int i=0; i < N; i++){
 		grid_f[i] = i;

@@ -1,3 +1,9 @@
+// Function to get elapsed time in seconds 
+double get_elapsed_time(struct timespec start, struct timespec end) {
+    return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+}
+
+
 // radix-2 Cooley-Tukey algorithm
 double complex* ditfft2(const double complex *x, size_t N, size_t s, size_t offset){		//return a pointer
 	double complex* X = (double complex*)malloc(N * sizeof(double complex));	// don't use malloc inside function!!!
