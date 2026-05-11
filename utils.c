@@ -84,3 +84,63 @@ void create_json(char* filename, double* x, double* y, double complex* z, size_t
 	fprintf(fptr, "]\n");
 	fclose(fptr);
 }
+
+
+// ------------------------------------------------------------------ //
+//  bit_reverse_copy  (unchanged from CLRS)
+// ------------------------------------------------------------------ //
+static void bit_reverse_copy(const double complex *a,
+                              double complex *A,
+                              size_t n) {
+    size_t n_bits = (size_t)round(log2((double)n));
+    for (size_t k = 0; k < n; k++) {
+        size_t r = 0, tmp = k;
+        for (size_t b = 0; b < n_bits; b++) {
+            r   = (r << 1) | (tmp & 1);
+            tmp >>= 1;
+        }
+        A[r] = a[k];
+    }
+}
+
+
+// ------------------------------------------------------------------ //
+//  Twiddle table
+// ------------------------------------------------------------------ //
+ 
+static void precompute_twiddles(size_t n) {
+    if (twiddle_N == n) return;         // already built for this size
+    free(twiddles);
+    twiddles  = (double complex *)malloc((n / 2) * sizeof(double complex));
+    twiddle_N = n;
+    for (size_t k = 0; k < n / 2; k++)
+        twiddles[k] = cexp(-2.0 * I * M_PI * (double)k / (double)n);
+}
+
+
+// ------------------------------------------------------------------ //
+//  iterative_fft
+// ------------------------------------------------------------------ //
+void iterative_fft(const double complex *a, double complex *A, size_t n) {
+ 
+    precompute_twiddles(n);     // no-op after the first call for size n
+ 
+    bit_reverse_copy(a, A, n);
+ 
+    size_t log_n = (size_t)round(log2((double)n));
+ 
+    for (size_t s = 1; s <= log_n; s++) {
+        size_t m    = (size_t)1 << s;
+        size_t step = n / m;
+ 
+        for (size_t k = 0; k < n; k += m) {
+            for (size_t j = 0; j < m / 2; j++) {
+                double complex w = twiddles[j * step];
+                double complex t = w * A[k + j + m / 2];
+                double complex u = A[k + j];
+                A[k + j]         = u + t;
+                A[k + j + m / 2] = u - t;
+            }
+        }
+    }
+}
