@@ -107,7 +107,9 @@ static void bit_reverse_copy(const double complex *a,
 // ------------------------------------------------------------------ //
 //  Twiddle table
 // ------------------------------------------------------------------ //
- 
+static double complex *twiddles  = NULL;
+static size_t          twiddle_N = 0;
+
 static void precompute_twiddles(size_t n) {
     if (twiddle_N == n) return;         // already built for this size
     free(twiddles);
@@ -130,7 +132,7 @@ void iterative_fft(const double complex *a, double complex *A, size_t n) {
     size_t log_n = (size_t)round(log2((double)n));
  
     for (size_t s = 1; s <= log_n; s++) {
-        size_t m    = (size_t)1 << s;
+        size_t m = (size_t)1 << s;	//fast way to compute 2^s
         size_t step = n / m;
  
         for (size_t k = 0; k < n; k += m) {
