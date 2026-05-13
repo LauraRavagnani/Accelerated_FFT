@@ -10,7 +10,7 @@
 
 
 int main(int argc, char *argv[]){		// put the value of N when run
-	bool iterative_mode = false;
+	bool iterative_mode = true;
 
 	//size_t N = 1024;
 	size_t N = atoi(argv[1]);
@@ -40,10 +40,9 @@ int main(int argc, char *argv[]){		// put the value of N when run
 		create_json("Gxy_vs_xy.json", data.grid_x, data.grid_y, data.Gxy, N);
 	}
 
-	if (iterative_mode){
-		
+	clock_gettime(CLOCK_MONOTONIC, &start);
 
-		clock_gettime(CLOCK_MONOTONIC, &start);
+	if (iterative_mode == true){
 
 		// perform fft first on rows
 		for(int i=0; i < N; i++){
@@ -68,8 +67,6 @@ int main(int argc, char *argv[]){		// put the value of N when run
 			}
 		}
 	} else {
-		clock_gettime(CLOCK_MONOTONIC, &start);
-
 		// perform fft first on rows
 		for(int i=0; i < N; i++){
 			X_k = ditfft2(data.Gxy, N, 1, i*N);
@@ -104,7 +101,9 @@ int main(int argc, char *argv[]){		// put the value of N when run
 	}
 
 	// create json with fft result
-	create_json("fft_prova.json", grid_f, grid_f, X_kl, N);
+	if(N == 8){
+		create_json("fft_prova.json", grid_f, grid_f, X_kl, N);
+	}
 
 	free(data.grid_x);
 	free(data.grid_y);
