@@ -35,8 +35,10 @@ int main(int argc, char *argv[]){		// put the value of N when run
 	// create dataset
 	struct dataset data = create_dataset(N, fx, fy);
 
-	// create json with dataset
-	create_json("Gxy_vs_xy.json", data.grid_x, data.grid_y, data.Gxy, N);
+	// create json with dataset only for N = 128 (used for visualization)
+	if(N == 128){
+		create_json("Gxy_vs_xy.json", data.grid_x, data.grid_y, data.Gxy, N);
+	}
 
 	if (iterative_mode){
 		
