@@ -92,9 +92,11 @@ void create_json(char* filename, double* x, double* y, double complex* z, size_t
 static void bit_reverse_copy(const double complex *a,
                               double complex *A,
                               size_t n) {
-    size_t n_bits = (size_t)round(log2((double)n));
+    //size_t n_bits = (size_t)round(log2((double)n));
+	size_t n_bits = (size_t)log2(n)
     for (size_t k = 0; k < n; k++) {
-        size_t r = 0, tmp = k;
+        size_t r = 0
+		size_t tmp = k;
         for (size_t b = 0; b < n_bits; b++) {
             r   = (r << 1) | (tmp & 1);
             tmp >>= 1;
@@ -129,7 +131,7 @@ void iterative_fft(const double complex *a, double complex *A, size_t n) {
  
     bit_reverse_copy(a, A, n);
  
-    size_t log_n = (size_t)round(log2((double)n));
+    size_t log_n = (size_t)log2(n);
  
     for (size_t s = 1; s <= log_n; s++) {
         size_t m = (size_t)1 << s;	//fast way to compute 2^s
