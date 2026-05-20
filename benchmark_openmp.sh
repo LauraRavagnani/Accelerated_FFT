@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Define the values of NTHREADS to test
-THREAD_VALUES=(1 2 4 6 8 12 16)
+THREAD_VALUES=(1 2 4 8 16)
 
 # N is fixed — pass as argument or default to 512
 N="${1:-512}"
 
 # Create or clear the output file
-echo "NThreads,Run,ExecutionTime" > results_omp.csv
+echo "NThreads,Run,ExecutionTime" > results_omp_4096.csv
 
 for NTHREADS in "${THREAD_VALUES[@]}"
 do
@@ -17,7 +17,7 @@ do
         TIME=$(OMP_NUM_THREADS=$NTHREADS ./fft_openmp.out $N | grep -oP '\d+\.\d+')
 
         # Save to CSV
-        echo "$NTHREADS,$RUN,$TIME" >> results_omp.csv
+        echo "$NTHREADS,$RUN,$TIME" >> results_omp_4096.csv
     done
     echo "Done NTHREADS=$NTHREADS"
 done
