@@ -94,7 +94,7 @@ int main(int argc, char *argv[]){		// put the value of N when run
 	
 	clock_gettime(CLOCK_MONOTONIC, &t1);
 	elapsed = get_elapsed_time(start, t1);
-	printf("Execution time (fft): %.6f seconds\n", elapsed);
+	printf("%.6f\n", elapsed);
 
 	for(int i=0; i < N; i++){
 		grid_f[i] = i;

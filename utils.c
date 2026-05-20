@@ -93,9 +93,9 @@ static void bit_reverse_copy(const double complex *a,
                               double complex *A,
                               size_t n) {
     //size_t n_bits = (size_t)round(log2((double)n));
-	size_t n_bits = (size_t)log2(n)
-    for (size_t k = 0; k < n; k++) {
-        size_t r = 0
+	size_t n_bits = (size_t)log2(n);
+    for (size_t k = 0; k < n; k++){
+        size_t r = 0;
 		size_t tmp = k;
         for (size_t b = 0; b < n_bits; b++) {
             r   = (r << 1) | (tmp & 1);
