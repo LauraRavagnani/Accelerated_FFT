@@ -3,7 +3,7 @@ import re
 import csv
 import os
 
-EXECUTABLE = "./fft_openmp.out"
+EXECUTABLE = "../fft_openmp.out"
 N_VALUES = [64, 128, 256, 512, 1024, 2048, 4096]
 N_THREADS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 RUNS = 10
