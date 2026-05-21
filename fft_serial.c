@@ -10,7 +10,7 @@
 
 
 int main(int argc, char *argv[]){		// put the value of N when run
-	bool iterative_mode = true;
+	bool iterative_mode = false;
 
 	//size_t N = 1024;
 	size_t N = atoi(argv[1]);

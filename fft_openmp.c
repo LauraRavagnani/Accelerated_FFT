@@ -11,8 +11,11 @@
 int main(int argc, char *argv[]) {
 
     size_t N  = atoi(argv[1]);
+    size_t nth = atoi(argv[2]);
     size_t fx = 2;
     size_t fy = 2;
+
+    omp_set_num_threads(nth);
 
     // Shared output arrays — each element written by exactly one thread
     double complex *X_kl   = (double complex *)malloc(N * N * sizeof(double complex));
@@ -92,7 +95,7 @@ int main(int argc, char *argv[]) {
 
     clock_gettime(CLOCK_MONOTONIC, &t1);
     elapsed = get_elapsed_time(start, t1);
-    printf("Execution time (fft): %.6f seconds\n", elapsed);
+    printf("%.6f\n", elapsed);
 
     // grid_f is sequential and trivial — not worth parallelising
     for (int i = 0; i < (int)N; i++) {

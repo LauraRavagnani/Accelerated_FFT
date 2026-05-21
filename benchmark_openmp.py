@@ -1,0 +1,30 @@
+import subprocess
+import re
+import csv
+import os
+
+EXECUTABLE = "./fft_openmp.out"
+N_VALUES = [64, 128, 256, 512, 1024, 2048, 4096]
+N_THREADS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+RUNS = 10
+OUTPUT_CSV = "results_openmp.csv"
+
+
+with open(OUTPUT_CSV, "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["N", "NThreads", "Run", "ExecutionTime"])
+
+    for N in N_VALUES:
+        for nth in N_THREADS:
+            for run in range(RUNS):
+                proc = subprocess.run(
+                    [EXECUTABLE, str(N), str(nth)],
+                    capture_output=True,
+                    text=True,
+                    env={**os.environ, "OMP_NUM_THREADS": str(nth)},
+                )
+                time = proc.stdout.strip()
+                writer.writerow([N, nth, run, time])
+            print(f"Done N={N}, threads={nth}")
+
+print("Done!")
