@@ -21,9 +21,8 @@ int main(int argc, char *argv[]) {
     double complex *X_kl   = (double complex *)malloc(N * N * sizeof(double complex));
     double         *abs_v  = (double *)        malloc(N * N * sizeof(double));
     double         *grid_f = (double *)        malloc(N      * sizeof(double));
+    double         *grid_f_shift = (double *)        malloc(N      * sizeof(double));
 
-    // col / X_k / X_l are now allocated per-thread inside parallel regions;
-    // do NOT allocate them here — a single shared buffer would race.
 
     struct timespec start, t1;
     double elapsed = 0.0;
@@ -97,20 +96,32 @@ int main(int argc, char *argv[]) {
     elapsed = get_elapsed_time(start, t1);
     printf("%.6f\n", elapsed);
 
-    // grid_f is sequential and trivial — not worth parallelising
+    double complex *X_kl_shift = fftshift_2d(X_kl, N);
+
     for (int i = 0; i < (int)N; i++) {
         grid_f[i] = i;
+    }
+
+    for (int i = 0; i < (int)N; i++) {
+        grid_f_shift[i] = (double)(i - (int)N/2);
     }
 
     if (N == 8) {
         create_json("fft_res_omp.json", grid_f, grid_f, X_kl, N);
     }
 
+    if (N == 8) {
+        create_json("fft_res_omp_shift.json", grid_f_shift, grid_f_shift, X_kl_shift, N);
+    }
+
+    validate_fft(X_kl_shift, N, fx, fy);
+
     free(data.grid_x);
     free(data.grid_y);
     free(data.Gxy);
     free(grid_f);
     free(X_kl);
+    free(X_kl_shift);
     free(abs_v);
     return 0;
 }

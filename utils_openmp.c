@@ -144,3 +144,62 @@ void iterative_fft(const double complex *a, double complex *A, size_t n) {
         // stage s are complete before stage s+1 begins.
     }
 }
+
+
+double complex* fftshift_2d(const double complex *X, size_t N) {
+   
+    double complex *X_shift = (double complex *)malloc(N * N * sizeof(double complex));
+
+    #pragma omp parallel for schedule(static) collapse(2)
+    for (size_t i = 0; i < N/2; i++) {
+        for (size_t j = 0; j < N/2; j++) {
+
+            // Q0 (top-left)     -> center of Q3 (bottom-right)
+            X_shift[(i + N/2) * N + (j + N/2)] = X[i * N + j];
+
+            // Q3 (bottom-right) -> center of Q0 (top-left)
+            X_shift[i * N + j]                   = X[(i + N/2) * N + (j + N/2)];
+
+            // Q1 (top-right)    -> center of Q2 (bottom-left)
+            X_shift[(i + N/2) * N + j]          = X[i * N + (j + N/2)];
+
+            // Q2 (bottom-left)  -> center of Q1 (top-right)
+            X_shift[i * N + (j + N/2)]          = X[(i + N/2) * N + j];
+        }
+    }
+
+    return X_shift;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////////////
+///////// Validate the implementation against the expected cosine transform output. /////////
+/////////////////////////////////////////////////////////////////////////////////////////////
+
+void validate_fft(double complex *X, size_t N, size_t fx, size_t fy) {
+    //double expected_peak = (double)(N * N) / 4.0;
+    double tolerance = 1e-6;
+    int n_errors = 0;
+    
+    #pragma omp parallel for schedule(static) collapse(2) reduction(+:n_errors)
+    for(int i=0; i<(int)N; i++){
+        for(int j=0; j<(int)N; j++){
+            double diff = 0.0;
+            if((i == fx && j == fy) || (i == fx && j == N-fy) || (i == N-fx && j == fy) || (i == N-fx && j == N-fy)){
+                diff = fabs(X[i * N + j] - pow(N, 2)/4);
+            } else {
+                diff = X[i * N + j];        
+            }
+
+            if(diff > tolerance){
+                #pragma omp critical
+                printf("Failed verification");
+                n_errors += 1;
+            };
+        }
+    }
+
+    if (n_errors == 0){
+        printf("FFT computed successfully!\n");
+    }
+}
