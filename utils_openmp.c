@@ -1,13 +1,3 @@
-// Function to get elapsed time in seconds 
-double get_elapsed_time(struct timespec start, struct timespec end) {
-    return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
-}
-
-// define dataset function (2D)
-double func_Gxy(const double x, const double y, size_t fx, size_t fy){
-	return cos(2 * M_PI * fx * x) * cos(2 * M_PI * fy * y);
-}
-
 // define struct to return multiple objects when create dataset
 struct dataset{
 	double *grid_x;
@@ -19,7 +9,6 @@ struct dataset{
 // create dataset
 struct dataset create_dataset(size_t N, size_t fx, size_t fy){			//return a pointer
 	struct dataset d;
-
 
 	d.grid_x = (double*)malloc(N * sizeof(double));
 	d.grid_y = (double*)malloc(N * sizeof(double));

@@ -46,7 +46,7 @@ int main(int argc, char *argv[]){		// put the value of N when run
 
 		// perform fft first on rows
 		for(int i=0; i < N; i++){
-			iterative_fft(data.Gxy + i * N, X_k, N);
+			iterative_fft(data.Gxy + i * N, X_k, N);	// inputs are pointers
 
 			// replace row of original dataset
 			for(int j=0; j < N; j++){

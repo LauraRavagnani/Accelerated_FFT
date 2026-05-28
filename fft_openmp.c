@@ -5,7 +5,7 @@
 #include <complex.h>
 #include <stdbool.h>
 #include <omp.h>
-//#include "utils.c"
+#include "utils.c"
 #include "utils_openmp.c"
 
 int main(int argc, char *argv[]) {
