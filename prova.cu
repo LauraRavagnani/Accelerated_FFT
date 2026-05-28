@@ -5,15 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// #define CUDA_CHECK(call) do { \
-//     cudaError_t _e = (call); \
-//     if (_e != cudaSuccess) { \
-//         fprintf(stderr, "CUDA error %s:%d  %s\n", \
-//                 __FILE__, __LINE__, cudaGetErrorString(_e)); \
-//         exit(EXIT_FAILURE); \
-//     } \
-// } while (0)
-
 #define THREADS_PER_BLOCK  2
 #define N 8
 
@@ -23,11 +14,10 @@
 __global__ void kernel_bit_reverse_copy(const cuDoubleComplex *a,
                                         cuDoubleComplex *A,
                                         unsigned int n,
-					unsigned int n_bits)
+					                    unsigned int n_bits)
 {
-    auto k = blockIdx.x * blockDim.x + threadIdx.x;
+    auto k = blockIdx.x * blockDim.x + threadIdx.x; //one element per thread
     if (k < n){
-        /* Replicate the original C inner loop exactly, one thread per k */
         auto r   = 0;
         auto tmp = k;
         for (auto b = 0; b < n_bits; b++) {

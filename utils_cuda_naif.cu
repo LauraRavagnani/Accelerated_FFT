@@ -30,12 +30,11 @@
 /* ------------------------------------------------------------------ */
 __global__ void kernel_bit_reverse_copy(const cuDoubleComplex *a,
                                         cuDoubleComplex *A,
-                                        unsigned int n)
+                                        unsigned int n,
+					                    unsigned int n_bits)
 {
-    auto k = blockIdx.x * blockDim.x + threadIdx.x;
+    auto k = blockIdx.x * blockDim.x + threadIdx.x; //one element per thread
     if (k < n){
-        /* Replicate the original C inner loop exactly, one thread per k */
-        size_t n_bits = (size_t)log2(n);
         auto r   = 0;
         auto tmp = k;
         for (auto b = 0; b < n_bits; b++) {
@@ -48,55 +47,24 @@ __global__ void kernel_bit_reverse_copy(const cuDoubleComplex *a,
 }
 
 
-int main(int argc, char** argv) {
 
-    std::vector<cuDoubleComplex> a(N), A(N);
-    
-    a = [0, 1, 2, 3, 4, 5, 6, 7];
-
-    // device
-    cuDoubleComplex* d_a;
-    cuDoubleComplex* d_A;
-
-    size_t size = N * sizeof(cuDoubleComplex);
-
-    cudaMalloc((void**)&d_a, size);
-    cudaMalloc((void**)&d_A, size);
-
-    cudaMemcpy(d_a, a, size, cudaMemcpyHostToDevice);
-
-    printf("\nvector a\n");
-    for(int i=0; i<N; i++){
-        printf(a[i]);
-    }
-
-    int N_b = N / THREADS_PER_BLOCK;
-    int N_tpb = THREADS_PER_BLOCK;
-
-    kernel_bit_reverse_copy<<<N_b, N_tpb>>>(d_a, d_A, N);
-
-    cudaMemcpy(A, d_A, size, cudaMemcpyDeviceToHost);
-
-    printf("\nvector A\n");
-    for(int i=0; i<N; i++){
-        printf(A[i]);
-    }
+/* ------------------------------------------------------------------ */
+/* Twiddle kernel  */
+/* ------------------------------------------------------------------ */
+__global__ void kernel_precompute_twiddles(cuDoubleComplex *tw,
+                                            unsigned int half_n,
+                                            double inv_n)
+{
+    unsigned int k = blockIdx.x * blockDim.x + threadIdx.x;
+    if (k < half_n){
+        double s, c;
+        sincos(-2.0 * M_PI * (double)k * inv_n, &s, &c);
+        tw[k] = make_cuDoubleComplex(c, s);
+    }   
 }
 
 
 
-// /* ------------------------------------------------------------------ */
-// /* Twiddle kernel — sincos() is a single SFU instruction on Maxwell   */
-// /* ------------------------------------------------------------------ */
-// __global__ void kernel_precompute_twiddles(
-//     cuDoubleComplex *tw, unsigned int half_n, double inv_n)
-// {
-//     unsigned int k = blockIdx.x * blockDim.x + threadIdx.x;
-//     if (k >= half_n) return;
-//     double s, c;
-//     sincos(-2.0 * M_PI * (double)k * inv_n, &s, &c);
-//     tw[k] = make_cuDoubleComplex(c, s);
-// }
 
 // /* ------------------------------------------------------------------ */
 // /* Global-memory butterfly (one kernel launch per stage)              */
