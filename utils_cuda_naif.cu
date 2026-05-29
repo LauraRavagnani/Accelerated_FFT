@@ -28,13 +28,10 @@
 /* ------------------------------------------------------------------ */
 /* Bit-reversal kernel */
 /* ------------------------------------------------------------------ */
-__global__ void kernel_bit_reverse_copy(const cuDoubleComplex *a,
-                                        cuDoubleComplex *A,
-                                        unsigned int n,
-					                    unsigned int n_bits)
+__global__ void kernel_bit_reverse_copy(const cuDoubleComplex *a, cuDoubleComplex *A, unsigned int n, unsigned int n_bits)
 {
-    auto k = blockIdx.x * blockDim.x + threadIdx.x; //one element per thread
-    if (k < n){
+    auto k = blockIdx.x * blockDim.x + threadIdx.x;  
+    if (k < n){     //one element per thread
         auto r   = 0;
         auto tmp = k;
         for (auto b = 0; b < n_bits; b++) {
@@ -49,16 +46,14 @@ __global__ void kernel_bit_reverse_copy(const cuDoubleComplex *a,
 
 
 /* ------------------------------------------------------------------ */
-/* Twiddle kernel  */
+/* Twiddle kernel  */ 
 /* ------------------------------------------------------------------ */
-__global__ void kernel_precompute_twiddles(cuDoubleComplex *tw,
-                                            unsigned int half_n,
-                                            double inv_n)
+__global__ void kernel_precompute_twiddles(cuDoubleComplex *tw, unsigned int n)
 {
     unsigned int k = blockIdx.x * blockDim.x + threadIdx.x;
-    if (k < half_n){
+    if (k < n/2){   //need only half threads(one element per thread)  
         double s, c;
-        sincos(-2.0 * M_PI * (double)k * inv_n, &s, &c);
+        sincos(-2.0 * M_PI * (double)k / (double)n, &s, &c);
         tw[k] = make_cuDoubleComplex(c, s);
     }   
 }
@@ -66,26 +61,28 @@ __global__ void kernel_precompute_twiddles(cuDoubleComplex *tw,
 
 
 
-// /* ------------------------------------------------------------------ */
-// /* Global-memory butterfly (one kernel launch per stage)              */
-// /* ------------------------------------------------------------------ */
-// __global__ void kernel_butterfly(
-//     cuDoubleComplex * __restrict__ A,
-//     const cuDoubleComplex * __restrict__ twiddles,
-//     unsigned int n, unsigned int half, unsigned int step)
-// {
-//     unsigned int tid   = blockIdx.x * blockDim.x + threadIdx.x;
-//     if (tid >= n / 2) return;
-//     unsigned int group = tid / half;
-//     unsigned int j     = tid % half;
-//     unsigned int k     = group * (half * 2) + j;
+/* ------------------------------------------------------------------ */
+/* Global-memory butterfly (one kernel launch per stage)              */
+/* ------------------------------------------------------------------ */
+__global__ void kernel_butterfly(cuDoubleComplex *A, const cuDoubleComplex *twiddles, unsigned int n, unsigned int m, unsigned int step)
+{
+    /* map thread id back to the original (k, j) loop indices */
+    unsigned int tid  = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int half = m / 2;
 
-//     cuDoubleComplex w = twiddles[j * step];
-//     cuDoubleComplex t = cuCmul(w, A[k + half]);
-//     cuDoubleComplex u = A[k];
-//     A[k]        = cuCadd(u, t);
-//     A[k + half] = cuCsub(u, t);
-// }
+    /* total butterflies per stage = (n/m) groups * (m/2) per group */
+    if (tid < n / 2){
+        unsigned int k = (tid / half) * m;   /* outer loop: k += m        */
+        unsigned int j =  tid % half;        /* inner loop: j < m/2       */
+
+        cuDoubleComplex w = twiddles[j * step];
+        cuDoubleComplex t = cuCmul(w, A[k + j + half]);
+        cuDoubleComplex u = A[k + j];
+
+        A[k + j]        = cuCadd(u, t);
+        A[k + j + half] = cuCsub(u, t);
+    }
+}
 
 // /* ------------------------------------------------------------------ */
 // /* Shared-memory butterfly (all stages in SMEM — avoids DRAM traffic) */

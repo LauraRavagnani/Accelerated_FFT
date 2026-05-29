@@ -132,7 +132,9 @@ void iterative_fft(const double complex *a, double complex *A, size_t n) {
     bit_reverse_copy(a, A, n);
  
     size_t log_n = (size_t)log2(n);
- 
+	
+	// butterfly step
+
     for (size_t s = 1; s <= log_n; s++) {
         size_t m = (size_t)1 << s;	//fast way to compute 2^s
         size_t step = n / m;
