@@ -84,6 +84,22 @@ __global__ void kernel_butterfly(cuDoubleComplex *A, const cuDoubleComplex *twid
     }
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Kernel to transpose matrix A            */
+/* ------------------------------------------------------------------ */
+__global__ void matrixTransposition(float *A, float *A_T, int width) {
+
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < width && col < width) {
+        int transposedIdx = col * width + row;  // Transposed index
+        int originalIdx = row * width + col;    // Original index
+        A_T[transposedIdx] = A[originalIdx];
+    }
+}
+
 // /* ------------------------------------------------------------------ */
 // /* Shared-memory butterfly (all stages in SMEM — avoids DRAM traffic) */
 // /* ------------------------------------------------------------------ */
