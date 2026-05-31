@@ -18,11 +18,12 @@ int main(int argc, char** argv)
     size_t size_tw= (N/2) * sizeof(cuDoubleComplex);
 
     size_t fx = 2, fy = 2;
+
+    dim3 block2d(THREADS_PER_BLOCK, THREADS_PER_BLOCK);
+    dim3 grid2d(N / THREADS_PER_BLOCK, N / THREADS_PER_BLOCK);
     
     /* ---- host allocation ----*/
     cuDoubleComplex *h_X_kl   = (cuDoubleComplex*)malloc(size);
-
-    std::vector<cuDoubleComplex> h_mat(N * N);
 
     struct dataset data = create_dataset_cuda(N, fx, fy);
 
@@ -37,6 +38,13 @@ int main(int argc, char** argv)
 
     /* ---- precompute twiddles ---- */
     int N_b_tw = (N/2 + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    cudaEventRecord(start);
+
     kernel_precompute_twiddles<<<N_b_tw, THREADS_PER_BLOCK>>>(d_tw, N);
     cudaDeviceSynchronize();
 
@@ -46,21 +54,27 @@ int main(int argc, char** argv)
     cudaMemcpy(data.Gxy, d_Gxy, size, cudaMemcpyDeviceToHost);
 
     /* ---- step 2: transpose ---- */
-    dim3 block2d(THREADS_PER_BLOCK, THREADS_PER_BLOCK);
-    dim3 grid2d(N / THREADS_PER_BLOCK, N / THREADS_PER_BLOCK);
     matrixTransposition<<<grid2d, block2d>>>(d_Gxy, d_Gxy_T, N);
     cudaDeviceSynchronize();
 
     /* ---- step 3: FFT on each row of transposed matrix ---- */
     cuda_fft(d_Gxy_T, d_X_k, d_tw, N, n_bits);
 
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+
+    float elapsed;
+    cudaEventElapsedTime(&elapsed,start,stop);
+    printf("%.6f\n", elapsed*1e9);
+    
     /* ---- step 4: transpose back to get final 2D FFT ---- */
-    matrixTransposition<<<grid2d, block2d>>>(d_Gxy_T, d_Gxy, N);
-    cudaDeviceSynchronize();
+    // matrixTransposition<<<grid2d, block2d>>>(d_Gxy_T, d_Gxy, N);
+    // cudaDeviceSynchronize();
 
     /* ---- copy final result to host and print ---- */
-    cudaMemcpy(h_X_kl, d_Gxy, size, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_X_kl, d_Gxy_T, size, cudaMemcpyDeviceToHost);
     // print_matrix("Final 2D FFT result", h_mat, N);
+
 
     validate_fft(h_X_kl, N, fx, fy);
 
