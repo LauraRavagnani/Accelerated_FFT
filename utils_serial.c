@@ -45,7 +45,7 @@ struct dataset{
 
 
 // create dataset
-struct dataset create_dataset(size_t N, size_t fx, size_t fy){			//return a pointer
+struct dataset create_dataset_cuda(size_t N, size_t fx, size_t fy){			//return a pointer
 	struct dataset d;
 
 
