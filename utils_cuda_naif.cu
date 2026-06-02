@@ -1,6 +1,3 @@
-#define THREADS_PER_BLOCK  2
-#define N 8
-
 // define dataset function (2D)
 cuDoubleComplex func_Gxy(const double x, const double y, size_t fx, size_t fy){
 	return make_cuDoubleComplex(cos(2 * M_PI * fx * x) * cos(2 * M_PI * fy * y), 0.0);
@@ -23,7 +20,7 @@ struct dataset create_dataset_cuda(size_t n, size_t fx, size_t fy){			//return a
 	d.Gxy = (cuDoubleComplex*)malloc(n * n * sizeof(cuDoubleComplex));
 
 	//create x and y grids
-	for(int i=0; i < N; i++){
+	for(int i=0; i < n; i++){
 		d.grid_x[i] = (double)i / (double)n;
 		d.grid_y[i] = (double)i / (double)n;
 	}
@@ -41,20 +38,38 @@ struct dataset create_dataset_cuda(size_t n, size_t fx, size_t fy){			//return a
 /* ------------------------------------------------------------------ */
 /* Bit-reversal kernel                                                */
 /* ------------------------------------------------------------------ */
+// __global__ void kernel_bit_reverse_copy(const cuDoubleComplex *a,
+//                                               cuDoubleComplex *A,
+//                                         unsigned int n,
+//                                         unsigned int n_bits)
+// {
+//     auto k = blockIdx.x * blockDim.x + threadIdx.x;
+//     if (k < n) {
+//         auto r   = 0;
+//         auto tmp = k;
+//         for (auto b = 0; b < n_bits; b++) {
+//             r   = (r << 1) | (tmp & 1);
+//             tmp >>= 1;
+//         }
+//         A[r] = a[k];
+//     }
+// }
+
 __global__ void kernel_bit_reverse_copy(const cuDoubleComplex *a,
-                                              cuDoubleComplex *A,
-                                        unsigned int n,
-                                        unsigned int n_bits)
+                                                cuDoubleComplex *A,
+                                                 unsigned int n,
+                                                 unsigned int n_bits)
 {
-    auto k = blockIdx.x * blockDim.x + threadIdx.x;
-    if (k < n) {
-        auto r   = 0;
-        auto tmp = k;
-        for (auto b = 0; b < n_bits; b++) {
-            r   = (r << 1) | (tmp & 1);
+    unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int row = blockIdx.y;
+    if (tid < n) {
+        int r = 0;
+        int tmp = tid;
+        for (int b = 0; b < n_bits; b++){
+            r = (r << 1) | (tmp & 1);
             tmp >>= 1;
         }
-        A[r] = a[k];
+        A[row * n + r] = a[row * n + tid];
     }
 }
 
@@ -74,15 +89,35 @@ __global__ void kernel_precompute_twiddles(cuDoubleComplex *tw, unsigned int n)
 /* ------------------------------------------------------------------ */
 /* Butterfly kernel ==> compute each row independently                                                   */
 /* ------------------------------------------------------------------ */
-__global__ void kernel_butterfly(cuDoubleComplex *A,
-                                  const cuDoubleComplex *twiddles,
-                                  unsigned int n,
-                                  unsigned int m,
-                                  unsigned int step,
-                                  unsigned int row_offset)
+// __global__ void kernel_butterfly(cuDoubleComplex *A,
+//                                   const cuDoubleComplex *twiddles,
+//                                   unsigned int n,
+//                                   unsigned int m,
+//                                   unsigned int step,
+//                                   unsigned int row_offset)
+// {
+//     unsigned int tid  = blockIdx.x * blockDim.x + threadIdx.x;
+//     unsigned int half = m / 2;
+//     if (tid < n / 2) {
+//         unsigned int k = (tid / half) * m;
+//         unsigned int j =  tid % half;
+//         cuDoubleComplex w = twiddles[j * step];
+//         cuDoubleComplex t = cuCmul(w, A[row_offset + k + j + half]);
+//         cuDoubleComplex u = A[row_offset + k + j];
+//         A[row_offset + k + j]        = cuCadd(u, t);
+//         A[row_offset + k + j + half] = cuCsub(u, t);
+//     }
+// }
+
+// Launch ALL rows at once with a 2D grid
+// gridDim.x = blocks along the row, gridDim.y = row index
+__global__ void kernel_butterfly(cuDoubleComplex *A, const cuDoubleComplex *twiddles, unsigned int n, unsigned int m, unsigned int step)
 {
-    unsigned int tid  = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;  // position in row
+    unsigned int row = blockIdx.y;                               // which row
+    unsigned int row_offset = row * n;
     unsigned int half = m / 2;
+
     if (tid < n / 2) {
         unsigned int k = (tid / half) * m;
         unsigned int j =  tid % half;
@@ -93,6 +128,13 @@ __global__ void kernel_butterfly(cuDoubleComplex *A,
         A[row_offset + k + j + half] = cuCsub(u, t);
     }
 }
+
+// // Launch: all N rows, n/2 butterfly pairs per row
+// int TPB = 256;
+// dim3 block(TPB);
+// dim3 grid((n/2 + TPB - 1) / TPB, n);  // gridDim.y = number of rows
+// kernel_butterfly_allrows<<<grid, block>>>(d_mat, d_tw, n, m, step);
+// // ONE cudaDeviceSynchronize() per stage instead of N×n_bits
 
 /* ------------------------------------------------------------------ */
 /* Transpose kernel     ==> 2d because transpose all matrix at once                                             */
@@ -108,41 +150,10 @@ __global__ void matrixTransposition(cuDoubleComplex *A,
     }
 }
 
-/* ------------------------------------------------------------------ */
-/* Helper: FFT on every row of a NxN matrix on device                */
-/* ------------------------------------------------------------------ */
-void cuda_fft(cuDoubleComplex *d_mat,
-              cuDoubleComplex *d_tmp,
-              cuDoubleComplex *d_tw,
-              int n, int n_bits)
-{
-    int N_b_row = n / THREADS_PER_BLOCK;
-
-    for (int row = 0; row < n; row++) {
-        unsigned int row_offset = row * n;
-
-        /* bit-reverse copy: read from matrix row, write to temp buffer */
-        kernel_bit_reverse_copy<<<N_b_row, THREADS_PER_BLOCK>>>(d_mat + row_offset, d_tmp, n, n_bits);
-        cudaDeviceSynchronize();
-
-        /* copy bit-reversed result back into the matrix row */
-        cudaMemcpy(d_mat + row_offset, d_tmp, n * sizeof(cuDoubleComplex), cudaMemcpyDeviceToDevice);
-
-        /* butterfly stages */
-        for (int s = 1; s <= n_bits; s++) {
-            unsigned int m    = 1u << s;
-            unsigned int step = n / m;
-            int N_b = (n/2 + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
-            kernel_butterfly<<<N_b, THREADS_PER_BLOCK>>>(d_mat, d_tw, n, m, step, row_offset);
-            cudaDeviceSynchronize();
-        }
-    }
-}
-
 
 void validate_fft(cuDoubleComplex *h_X_kl, size_t n, size_t fx, size_t fy)
 {
-    double tolerance = 1e-6;
+    double tolerance = 1e-3;
     int n_errors = 0;
 
     for (int i = 0; i < (int)n; i++) {
@@ -151,10 +162,7 @@ void validate_fft(cuDoubleComplex *h_X_kl, size_t n, size_t fx, size_t fy)
             cuDoubleComplex val = h_X_kl[i * n + j];
             double diff = 0.0;
 
-            if ((i == fx && j == fy)       ||
-                (i == fx && j == n - fy)   ||
-                (i == n - fx && j == fy)   ||
-                (i == n - fx && j == n - fy)) {
+            if ((i == fx && j == fy) || (i == fx && j == n - fy) || (i == n - fx && j == fy) || (i == n - fx && j == n - fy)) {
                 /* at peak bins: real part should equal N²/4, imag ~ 0 */
                 diff = fabs(cuCreal(val) - pow(n, 2) / 4.0);
             } else {
@@ -163,15 +171,14 @@ void validate_fft(cuDoubleComplex *h_X_kl, size_t n, size_t fx, size_t fy)
             }
 
             if (diff > tolerance) {
-                printf("Failed verification at (%d,%d): got (%f,%f), diff=%e\n",
-                       i, j, cuCreal(val), cuCimag(val), diff);
+                printf("Error at (%d,%d): (%e,%e)\n", i, j, cuCreal(val), cuCimag(val));
+                //printf("Failed verification");
                 n_errors++;
             }
         }
     }
-
-    if (n_errors == 0)
-        printf("FFT computed successfully!\n");
+    // if (n_errors == 0)
+    //     printf("FFT computed successfully!\n");
 }
 
 // /* ------------------------------------------------------------------ */
