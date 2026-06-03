@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 //#include "utils_serial.c"
-#include "utils_cuda_naif.cu"
+#include "utils_cuda_global.cu"
 
 //#define THREADS_PER_BLOCK  2
 #define N 512
@@ -42,7 +42,7 @@
 // }
 
 void cuda_fft(cuDoubleComplex *d_mat,
-              cuDoubleComplex *d_tmp,
+              //cuDoubleComplex *d_tmp,
               cuDoubleComplex *d_tw,
               int n, int n_bits, dim3 block, dim3 grid_br, dim3 grid_bf)
 {
@@ -52,11 +52,11 @@ void cuda_fft(cuDoubleComplex *d_mat,
     // dim3 grid_bf((n/2   + TPB - 1) / TPB, n);  // butterfly:   n/2 pairs per row
 
     // Step 1: bit-reverse all rows at once
-    kernel_bit_reverse_copy<<<grid_br, block>>>(d_mat, d_tmp, n, n_bits);
+    kernel_bit_reverse_copy<<<grid_br, block>>>(d_mat, n, n_bits);
     cudaDeviceSynchronize();
 
     // copy bit-reversed result back (all rows at once)
-    cudaMemcpy(d_mat, d_tmp, n * n * sizeof(cuDoubleComplex), cudaMemcpyDeviceToDevice);
+    //cudaMemcpy(d_mat, d_tmp, n * n * sizeof(cuDoubleComplex), cudaMemcpyDeviceToDevice);
 
     // Step 2: butterfly stages — one launch per stage, all rows in parallel
     for (int s = 1; s <= n_bits; s++) {
@@ -118,7 +118,8 @@ int main(int argc, char *argv[]){
     cudaDeviceSynchronize();
 
     /* ---- step 1: FFT on each row ---- */
-    cuda_fft(d_Gxy, d_X_k, d_tw, N, n_bits, block, grid_br, grid_bf);
+    //cuda_fft(d_Gxy, d_X_k, d_tw, N, n_bits, block, grid_br, grid_bf);
+    cuda_fft(d_Gxy, d_tw, N, n_bits, block, grid_br, grid_bf);
 
     //cudaMemcpy(data.Gxy, d_Gxy, size, cudaMemcpyDeviceToHost);
 
@@ -127,7 +128,8 @@ int main(int argc, char *argv[]){
     cudaDeviceSynchronize();
 
     /* ---- step 3: FFT on each row of transposed matrix ---- */
-    cuda_fft(d_Gxy_T, d_X_k, d_tw, N, n_bits, block, grid_br, grid_bf);
+    // cuda_fft(d_Gxy_T, d_X_k, d_tw, N, n_bits, block, grid_br, grid_bf);
+    cuda_fft(d_Gxy_T, d_tw, N, n_bits, block, grid_br, grid_bf);
 
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);

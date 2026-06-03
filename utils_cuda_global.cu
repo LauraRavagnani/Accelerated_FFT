@@ -55,8 +55,7 @@ struct dataset create_dataset_cuda(size_t n, size_t fx, size_t fy){			//return a
 //     }
 // }
 
-__global__ void kernel_bit_reverse_copy(const cuDoubleComplex *a,
-                                                cuDoubleComplex *A,
+__global__ void kernel_bit_reverse_copy(cuDoubleComplex *A,
                                                  unsigned int n,
                                                  unsigned int n_bits)
 {
@@ -69,7 +68,13 @@ __global__ void kernel_bit_reverse_copy(const cuDoubleComplex *a,
             r = (r << 1) | (tmp & 1);
             tmp >>= 1;
         }
-        A[row * n + r] = a[row * n + tid];
+
+        if (r > tid) {
+            cuDoubleComplex t = A[row * n + tid];
+            A[row * n + tid] = A[row * n + r];
+            A[row * n + r] = t;
+        }
+        //A[row * n + r] = a[row * n + tid];
     }
 }
 
