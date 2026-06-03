@@ -3,11 +3,11 @@ import re
 import csv
 import os
 
-EXECUTABLE = "./fft_cuda_naif.out"
+EXECUTABLE = "./fft_cuda_global.out"
 ##N_VALUES = [64, 128, 256, 512, 1024, 2048, 4096]
 N_THREADS_PER_BLOCK = [16, 32, 64, 128, 256, 512]
 RUNS = 100
-OUTPUT_CSV = "results_cuda_naif.csv"
+OUTPUT_CSV = "results_cuda_global.csv"
 
 
 with open(OUTPUT_CSV, "w", newline="") as f:
