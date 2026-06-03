@@ -111,6 +111,7 @@ __global__ void kernel_precompute_twiddles(cuDoubleComplex *tw, unsigned int n)
 
 // Launch ALL rows at once with a 2D grid
 // gridDim.x = blocks along the row, gridDim.y = row index
+
 __global__ void kernel_butterfly(cuDoubleComplex *A, const cuDoubleComplex *twiddles, unsigned int n, unsigned int m, unsigned int step)
 {
     unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;  // position in row

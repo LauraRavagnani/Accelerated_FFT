@@ -44,12 +44,12 @@
 void cuda_fft(cuDoubleComplex *d_mat,
               cuDoubleComplex *d_tmp,
               cuDoubleComplex *d_tw,
-              int n, int n_bits, int TPB)
+              int n, int n_bits, dim3 block, dim3 grid_br, dim3 grid_bf)
 {
-    // 2D grid: x = blocks along row, y = one block per row
-    dim3 block(TPB);
-    dim3 grid_br((n     + TPB - 1) / TPB, n);  // bit-reverse: n elements per row
-    dim3 grid_bf((n/2   + TPB - 1) / TPB, n);  // butterfly:   n/2 pairs per row
+    // // 2D grid: x = blocks along row, y = one block per row
+    // dim3 block(TPB);
+    // dim3 grid_br((n     + TPB - 1) / TPB, n);  // bit-reverse: n elements per row
+    // dim3 grid_bf((n/2   + TPB - 1) / TPB, n);  // butterfly:   n/2 pairs per row
 
     // Step 1: bit-reverse all rows at once
     kernel_bit_reverse_copy<<<grid_br, block>>>(d_mat, d_tmp, n, n_bits);
@@ -63,8 +63,8 @@ void cuda_fft(cuDoubleComplex *d_mat,
         unsigned int m    = 1u << s;
         unsigned int step = n / m;
         kernel_butterfly<<<grid_bf, block>>>(d_mat, d_tw, n, m, step);
-        cudaDeviceSynchronize();
     }
+    cudaDeviceSynchronize();
 }
 
 /* ------------------------------------------------------------------ */
@@ -75,7 +75,7 @@ int main(int argc, char *argv[]){
 
     int    n_bits = (int)log2((double)N);
     size_t size   = N * N * sizeof(cuDoubleComplex);
-    size_t size_r = N     * sizeof(cuDoubleComplex);
+    //size_t size_r = N     * sizeof(cuDoubleComplex);
     size_t size_tw= (N/2) * sizeof(cuDoubleComplex);
 
     size_t fx = 2, fy = 2;
@@ -84,6 +84,12 @@ int main(int argc, char *argv[]){
 
     dim3 block2d(tpb2d, tpb2d);
     dim3 grid2d(N / tpb2d, N / tpb2d);
+
+    // 2D grid: x = blocks along row, y = one block per row
+    dim3 block(THREADS_PER_BLOCK);
+    dim3 grid_br((N     + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, N);  // bit-reverse: n elements per row
+    dim3 grid_bf((N/2   + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, N);  // butterfly:   n/2 pairs per row
+
     
     /* ---- host allocation ----*/
     cuDoubleComplex *h_X_kl   = (cuDoubleComplex*)malloc(size);
@@ -112,23 +118,23 @@ int main(int argc, char *argv[]){
     cudaDeviceSynchronize();
 
     /* ---- step 1: FFT on each row ---- */
-    cuda_fft(d_Gxy, d_X_k, d_tw, N, n_bits, THREADS_PER_BLOCK);
+    cuda_fft(d_Gxy, d_X_k, d_tw, N, n_bits, block, grid_br, grid_bf);
 
-    cudaMemcpy(data.Gxy, d_Gxy, size, cudaMemcpyDeviceToHost);
+    //cudaMemcpy(data.Gxy, d_Gxy, size, cudaMemcpyDeviceToHost);
 
     /* ---- step 2: transpose ---- */
     matrixTransposition<<<grid2d, block2d>>>(d_Gxy, d_Gxy_T, N);
     cudaDeviceSynchronize();
 
     /* ---- step 3: FFT on each row of transposed matrix ---- */
-    cuda_fft(d_Gxy_T, d_X_k, d_tw, N, n_bits, THREADS_PER_BLOCK);
+    cuda_fft(d_Gxy_T, d_X_k, d_tw, N, n_bits, block, grid_br, grid_bf);
 
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
 
     float elapsed;
     cudaEventElapsedTime(&elapsed, start, stop);
-    printf("%.6f\n", elapsed*1e-3);
+    printf("%.9f\n", elapsed*1e-6);
     
     /* ---- step 4: transpose back to get final 2D FFT ---- */
     // matrixTransposition<<<grid2d, block2d>>>(d_Gxy_T, d_Gxy, N);
