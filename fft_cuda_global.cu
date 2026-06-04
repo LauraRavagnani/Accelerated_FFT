@@ -7,39 +7,8 @@
 //#include "utils_serial.c"
 #include "utils_cuda_global.cu"
 
-//#define THREADS_PER_BLOCK  2
+
 #define N 512
-
-/* ------------------------------------------------------------------ */
-/* Helper: FFT on every row of a NxN matrix on device                */
-/* ------------------------------------------------------------------ */
-// void cuda_fft(cuDoubleComplex *d_mat,
-//               cuDoubleComplex *d_tmp,
-//               cuDoubleComplex *d_tw,
-//               int n, int n_bits, int THREADS_PER_BLOCK)
-// {
-//     int N_b_row = n / THREADS_PER_BLOCK;
-
-//     for (int row = 0; row < n; row++) {
-//         unsigned int row_offset = row * n;
-
-//         /* bit-reverse copy: read from matrix row, write to temp buffer */
-//         kernel_bit_reverse_copy<<<N_b_row, THREADS_PER_BLOCK>>>(d_mat + row_offset, d_tmp, n, n_bits);
-//         cudaDeviceSynchronize();
-
-//         /* copy bit-reversed result back into the matrix row */
-//         cudaMemcpy(d_mat + row_offset, d_tmp, n * sizeof(cuDoubleComplex), cudaMemcpyDeviceToDevice);
-
-//         /* butterfly stages */
-//         for (int s = 1; s <= n_bits; s++) {
-//             unsigned int m    = 1u << s;
-//             unsigned int step = n / m;
-//             int N_b = (n/2 + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
-//             kernel_butterfly<<<N_b, THREADS_PER_BLOCK>>>(d_mat, d_tw, n, m, step, row_offset);
-//             cudaDeviceSynchronize();
-//         }
-//     }
-// }
 
 void cuda_fft(cuDoubleComplex *d_mat,
               //cuDoubleComplex *d_tmp,
@@ -108,8 +77,9 @@ int main(int argc, char *argv[]){
     /* ---- precompute twiddles ---- */
     int N_b_tw = (N/2 + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
-    cudaEvent_t start, stop;
+    cudaEvent_t start, t1, stop;
     cudaEventCreate(&start);
+    cudaEventCreate(&t1);
     cudaEventCreate(&stop);
 
     cudaEventRecord(start);
