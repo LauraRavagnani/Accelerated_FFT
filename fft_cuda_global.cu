@@ -1,133 +1,153 @@
-#include <vector>
+// =============================================================================
+// main.cu
+// 2D FFT — global memory only, exactly 3 kernels
+//
+// Algorithm (row-column decomposition):
+//   1. kernel_bit_reverse  on every row of G
+//   2. kernel_butterfly    on every row of G  (log2 N stages)
+//   3. kernel_transpose    G  →  G_T
+//   4. kernel_bit_reverse  on every row of G_T   (= every column of G)
+//   5. kernel_butterfly    on every row of G_T   (log2 N stages)
+//   (optional 6. kernel_transpose G_T → G  if you want row-major output)
+//
+// Compile:
+//   nvcc -O2 -arch=sm_53 -o fft2d main.cu
+// Run:
+//   ./fft2d <threads_per_block>        e.g.   ./fft2d 128
+// =============================================================================
+
 #include <cuda_runtime.h>
 #include <cuComplex.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-//#include "utils_serial.c"
-#include "utils_cuda_global.cu"
 
+#include "utils_cuda_global2.cu"
 
-#define N 512
-// use TPB=128. It matches TPB=256 in performance, but gives you twice as many blocks in the grid,
-// which provides better load balancing if you ever scale to larger N where some blocks finish earlier than others.
+#define N 512   // must be a power of two
+//#define THREADS_PER_BLOCK 128
 
-void cuda_fft(cuDoubleComplex *d_mat,
-              //cuDoubleComplex *d_tmp,
-              cuDoubleComplex *d_tw,
-              int n, int n_bits, dim3 block, dim3 grid_br, dim3 grid_bf)
+// -----------------------------------------------------------------------------
+// Helper: run one full 1-D FFT pass over every row of d_mat
+//   - one kernel_bit_reverse launch
+//   - log2(n) kernel_butterfly launches
+//   - one cudaDeviceSynchronize() at the end of the butterfly loop
+// -----------------------------------------------------------------------------
+static void fft_rows(cuDoubleComplex *d_mat,
+                     unsigned int     n,
+                     unsigned int     n_bits,
+                     int             THREADS_PER_BLOCK)
 {
-    // // 2D grid: x = blocks along row, y = one block per row
-    // dim3 block(TPB);
-    // dim3 grid_br((n     + TPB - 1) / TPB, n);  // bit-reverse: n elements per row
-    // dim3 grid_bf((n/2   + TPB - 1) / TPB, n);  // butterfly:   n/2 pairs per row
-
-    // Step 1: bit-reverse all rows at once
-    kernel_bit_reverse_copy<<<grid_br, block>>>(d_mat, n, n_bits);
+    // bit-reverse: each thread handles one element, 2D grid over all rows
+    //dim3 blk_br(THREADS_PER_BLOCK);
+    dim3 n_blocks_br(n / THREADS_PER_BLOCK, n);
+    kernel_bit_reverse<<<n_blocks_br, THREADS_PER_BLOCK>>>(d_mat, n, n_bits);
     cudaDeviceSynchronize();
 
-    // copy bit-reversed result back (all rows at once)
-    //cudaMemcpy(d_mat, d_tmp, n * n * sizeof(cuDoubleComplex), cudaMemcpyDeviceToDevice);
-
-    // Step 2: butterfly stages — one launch per stage, all rows in parallel
-    for (int s = 1; s <= n_bits; s++) {
+    // butterfly stages: each thread handles one pair, 2D grid over all rows
+    //dim3 blk_bf(THREADS_PER_BLOCK);
+    dim3 n_blocks_bf((n / 2) / THREADS_PER_BLOCK, n);
+    for (unsigned int s = 1; s <= n_bits; s++) {
         unsigned int m    = 1u << s;
         unsigned int step = n / m;
-        kernel_butterfly<<<grid_bf, block>>>(d_mat, d_tw, n, m, step);
+        kernel_butterfly<<<n_blocks_bf, THREADS_PER_BLOCK>>>(d_mat, n, m, step);
+        cudaDeviceSynchronize();   // inter-block ordering between stages
     }
-    cudaDeviceSynchronize();
 }
 
-/* ------------------------------------------------------------------ */
-/* Main                                                               */
-/* ------------------------------------------------------------------ */
-int main(int argc, char *argv[]){
+// -----------------------------------------------------------------------------
+// Main
+// -----------------------------------------------------------------------------
+int main(int argc, char *argv[])
+{
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <threads_per_block>\n", argv[0]);
+        return 1;
+    }
+    //const int THREADS_PER_BLOCK = 512;
     int THREADS_PER_BLOCK  = atoi(argv[1]);
 
-    int    n_bits = (int)log2((double)N);
-    size_t size   = N * N * sizeof(cuDoubleComplex);
-    //size_t size_r = N     * sizeof(cuDoubleComplex);
-    size_t size_tw= (N/2) * sizeof(cuDoubleComplex);
+    const unsigned int n      = N;
+    const unsigned int n_bits = (unsigned int)log2((double)n);
+    const size_t       size   = n * n * sizeof(cuDoubleComplex);
+    const size_t       fx = 2, fy = 2;
 
-    size_t fx = 2, fy = 2;
+    // tile size for the transpose kernel (keep ≤ 32 so block ≤ 1024 threads)
+    const int TILE = (THREADS_PER_BLOCK >= 32) ? 32 : (int)sqrt((double)THREADS_PER_BLOCK);
 
-    int tpb2d = min(THREADS_PER_BLOCK, 32); // keep 2D block ≤ 32×32 = 1024
+    // -------------------------------------------------------------------------
+    // Host allocation and dataset creation
+    // -------------------------------------------------------------------------
+    cuDoubleComplex *h_result = (cuDoubleComplex*)malloc(size);
+    struct dataset   data     = create_dataset(n, fx, fy);
 
-    dim3 block2d(tpb2d, tpb2d);
-    dim3 grid2d(N / tpb2d, N / tpb2d);
+    // -------------------------------------------------------------------------
+    // Device allocation
+    // -------------------------------------------------------------------------
+    cuDoubleComplex *d_A, *d_A_T;
+    cudaMalloc((void**)&d_A,   size);
+    cudaMalloc((void**)&d_A_T, size);
 
-    // 2D grid: x = blocks along row, y = one block per row
-    dim3 block(THREADS_PER_BLOCK);
-    dim3 grid_br((N     + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, N);  // bit-reverse: n elements per row
-    dim3 grid_bf((N/2   + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, N);  // butterfly:   n/2 pairs per row
+    cudaMemcpy(d_A, data.Gxy, size, cudaMemcpyHostToDevice);
 
-    
-    /* ---- host allocation ----*/
-    cuDoubleComplex *h_X_kl   = (cuDoubleComplex*)malloc(size);
+    // -------------------------------------------------------------------------
+    // Grid / block configs for the transpose
+    // -------------------------------------------------------------------------
+    dim3 blk_tr(TILE, TILE);
+    dim3 grd_tr((n + TILE - 1) / TILE, (n + TILE - 1) / TILE);
 
-    struct dataset data = create_dataset_cuda(N, fx, fy);
+    // -------------------------------------------------------------------------
+    // Timing
+    // -------------------------------------------------------------------------
+    cudaEvent_t ev_start, ev_stop;
+    cudaEventCreate(&ev_start);
+    cudaEventCreate(&ev_stop);
+    cudaEventRecord(ev_start);
 
-    /* ---- device allocations ---- */
-    cuDoubleComplex *d_Gxy, *d_Gxy_T, *d_X_k, *d_tw;
-    cudaMalloc((void**)&d_Gxy,   size);
-    cudaMalloc((void**)&d_Gxy_T, size);
-    cudaMalloc((void**)&d_X_k,   size);
-    cudaMalloc((void**)&d_tw,    size_tw);
+    // =========================================================================
+    // STEP 1 — FFT every row  (kernel_bit_reverse + kernel_butterfly)
+    // =========================================================================
+    fft_rows(d_A, n, n_bits, THREADS_PER_BLOCK);
 
-    cudaMemcpy(d_Gxy, data.Gxy, size, cudaMemcpyHostToDevice);
-
-    /* ---- precompute twiddles ---- */
-    int N_b_tw = (N/2 + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
-
-    cudaEvent_t start, t1, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&t1);
-    cudaEventCreate(&stop);
-
-    cudaEventRecord(start);
-
-    kernel_precompute_twiddles<<<N_b_tw, THREADS_PER_BLOCK>>>(d_tw, N);
+    // =========================================================================
+    // STEP 2 — Transpose  (kernel_transpose)
+    // =========================================================================
+    kernel_transpose<<<grd_tr, blk_tr>>>(d_A, d_A_T, n);
     cudaDeviceSynchronize();
 
-    /* ---- step 1: FFT on each row ---- */
-    //cuda_fft(d_Gxy, d_X_k, d_tw, N, n_bits, block, grid_br, grid_bf);
-    cuda_fft(d_Gxy, d_tw, N, n_bits, block, grid_br, grid_bf);
+    // =========================================================================
+    // STEP 3 — FFT every row of transposed matrix  (= column FFTs of original)
+    //          (kernel_bit_reverse + kernel_butterfly)
+    // =========================================================================
+    fft_rows(d_A_T, n, n_bits, THREADS_PER_BLOCK);
 
-    //cudaMemcpy(data.Gxy, d_Gxy, size, cudaMemcpyDeviceToHost);
-
-    /* ---- step 2: transpose ---- */
-    matrixTransposition<<<grid2d, block2d>>>(d_Gxy, d_Gxy_T, N);
-    cudaDeviceSynchronize();
-
-    /* ---- step 3: FFT on each row of transposed matrix ---- */
-    // cuda_fft(d_Gxy_T, d_X_k, d_tw, N, n_bits, block, grid_br, grid_bf);
-    cuda_fft(d_Gxy_T, d_tw, N, n_bits, block, grid_br, grid_bf);
-
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
+    cudaEventRecord(ev_stop);
+    cudaEventSynchronize(ev_stop);
 
     float elapsed;
-    cudaEventElapsedTime(&elapsed, start, stop);
-    printf("%.9f\n", elapsed*1e-6);
-    
-    /* ---- step 4: transpose back to get final 2D FFT ---- */
-    // matrixTransposition<<<grid2d, block2d>>>(d_Gxy_T, d_Gxy, N);
-    // cudaDeviceSynchronize();
+    cudaEventElapsedTime(&elapsed, ev_start, ev_stop);
+    printf("%.9f\n", elapsed * 1e-3);
 
-    /* ---- copy final result to host and print ---- */
-    cudaMemcpy(h_X_kl, d_Gxy_T, size, cudaMemcpyDeviceToHost);
-    // print_matrix("Final 2D FFT result", h_mat, N);
+    // -------------------------------------------------------------------------
+    // Copy result back and validate
+    // NOTE: result lives in d_A_T (transposed layout).
+    //       Rows of d_A_T = columns of the 2D FFT output.
+    //       Transpose back with kernel_transpose if row-major order is needed.
+    // -------------------------------------------------------------------------
+    cudaMemcpy(h_result, d_A_T, size, cudaMemcpyDeviceToHost);
+    validate_fft(h_result, n, fx, fy);
 
-
-    validate_fft(h_X_kl, N, fx, fy);
-
-    /* ---- cleanup ---- */
-    cudaFree(d_Gxy);
-    cudaFree(d_Gxy_T);
-    cudaFree(d_X_k);
-    cudaFree(d_tw);
-
-    free(h_X_kl);
+    // -------------------------------------------------------------------------
+    // Cleanup
+    // -------------------------------------------------------------------------
+    cudaFree(d_A);
+    cudaFree(d_A_T);
+    cudaEventDestroy(ev_start);
+    cudaEventDestroy(ev_stop);
+    free(h_result);
+    free(data.grid_x);
+    free(data.grid_y);
+    free(data.Gxy);
 
     return 0;
 }
