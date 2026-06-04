@@ -9,6 +9,8 @@
 
 
 #define N 512
+// use TPB=128. It matches TPB=256 in performance, but gives you twice as many blocks in the grid,
+// which provides better load balancing if you ever scale to larger N where some blocks finish earlier than others.
 
 void cuda_fft(cuDoubleComplex *d_mat,
               //cuDoubleComplex *d_tmp,
