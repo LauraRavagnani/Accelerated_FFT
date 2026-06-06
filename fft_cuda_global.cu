@@ -22,10 +22,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "utils_cuda_global2.cu"
+#include "utils_cuda_global.cu"
 
 #define N 512   // must be a power of two
-//#define THREADS_PER_BLOCK 128
+#define THREADS_PER_BLOCK 128
 
 // -----------------------------------------------------------------------------
 // Helper: run one full 1-D FFT pass over every row of d_mat
@@ -60,12 +60,12 @@ static void fft_rows(cuDoubleComplex *d_mat,
 // -----------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <threads_per_block>\n", argv[0]);
-        return 1;
-    }
-    //const int THREADS_PER_BLOCK = 512;
-    int THREADS_PER_BLOCK  = atoi(argv[1]);
+    // if (argc < 2) {
+    //     fprintf(stderr, "Usage: %s <threads_per_block>\n", argv[0]);
+    //     return 1;
+    // }
+    // //const int THREADS_PER_BLOCK = 512;
+    // int THREADS_PER_BLOCK  = atoi(argv[1]);
 
     const unsigned int n      = N;
     const unsigned int n_bits = (unsigned int)log2((double)n);
@@ -73,7 +73,22 @@ int main(int argc, char *argv[])
     const size_t       fx = 2, fy = 2;
 
     // tile size for the transpose kernel (keep ≤ 32 so block ≤ 1024 threads)
-    const int TILE = (THREADS_PER_BLOCK >= 32) ? 32 : (int)sqrt((double)THREADS_PER_BLOCK);
+    //const int TILE = (THREADS_PER_BLOCK >= 32) ? 32 : (int)sqrt((double)THREADS_PER_BLOCK);
+    const int TILE = 32;
+
+    // -------------------------------------------------------------------------
+    // Timing
+    // -------------------------------------------------------------------------
+    cudaEvent_t ev_start, ev_stop;
+    cudaEvent_t HtD_start, HtD_stop;
+    cudaEvent_t DtH_start, DtH_stop;
+    
+    cudaEventCreate(&ev_start);
+    cudaEventCreate(&ev_stop);
+    cudaEventCreate(&HtD_start);
+    cudaEventCreate(&HtD_stop);
+    cudaEventCreate(&DtH_start);
+    cudaEventCreate(&DtH_stop);
 
     // -------------------------------------------------------------------------
     // Host allocation and dataset creation
@@ -88,20 +103,21 @@ int main(int argc, char *argv[])
     cudaMalloc((void**)&d_A,   size);
     cudaMalloc((void**)&d_A_T, size);
 
+    cudaEventRecord(HtD_start);
     cudaMemcpy(d_A, data.Gxy, size, cudaMemcpyHostToDevice);
+    cudaEventRecord(HtD_stop);
+    cudaEventSynchronize(HtD_stop);
+
+    float time_HtD;
+    cudaEventElapsedTime(&time_HtD, HtD_start, HtD_stop);
+
 
     // -------------------------------------------------------------------------
     // Grid / block configs for the transpose
     // -------------------------------------------------------------------------
     dim3 blk_tr(TILE, TILE);
-    dim3 grd_tr((n + TILE - 1) / TILE, (n + TILE - 1) / TILE);
+    dim3 grd_tr(n / TILE, n / TILE);
 
-    // -------------------------------------------------------------------------
-    // Timing
-    // -------------------------------------------------------------------------
-    cudaEvent_t ev_start, ev_stop;
-    cudaEventCreate(&ev_start);
-    cudaEventCreate(&ev_stop);
     cudaEventRecord(ev_start);
 
     // =========================================================================
@@ -126,7 +142,6 @@ int main(int argc, char *argv[])
 
     float elapsed;
     cudaEventElapsedTime(&elapsed, ev_start, ev_stop);
-    printf("%.9f\n", elapsed * 1e-3);
 
     // -------------------------------------------------------------------------
     // Copy result back and validate
@@ -134,8 +149,18 @@ int main(int argc, char *argv[])
     //       Rows of d_A_T = columns of the 2D FFT output.
     //       Transpose back with kernel_transpose if row-major order is needed.
     // -------------------------------------------------------------------------
+    cudaEventRecord(DtH_start);
     cudaMemcpy(h_result, d_A_T, size, cudaMemcpyDeviceToHost);
+    cudaEventRecord(DtH_stop);
+
+    cudaEventSynchronize(DtH_stop);
+
+    float time_DtH;
+    cudaEventElapsedTime(&time_DtH, DtH_start, DtH_stop);
+    
     validate_fft(h_result, n, fx, fy);
+
+    printf("%.9f\t%.9f\t%.9f", elapsed * 1e-3, time_HtD * 1e-3, time_DtH * 1e-3);
 
     // -------------------------------------------------------------------------
     // Cleanup

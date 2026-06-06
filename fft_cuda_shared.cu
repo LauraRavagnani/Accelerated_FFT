@@ -6,6 +6,7 @@
 #include "utils_cuda_shared.cu"
 
 #define N 512
+#define THREADS_PER_BLOCK 128
 
 /* ------------------------------------------------------------------ */
 /* Helper: FFT on every row using shared memory kernel                */
