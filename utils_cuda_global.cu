@@ -116,12 +116,8 @@ __global__ void kernel_butterfly(cuDoubleComplex       *A,
     cuDoubleComplex u = A[row * n + k + j];
     cuDoubleComplex t = cuCmul(w, A[row * n + k + j + half]);
 
-    __syncthreads();                         // makes all threads in a block wait until every
-                                            // thread in that block has reached that line before
-                                            // any of them continue
     A[row * n + k + j]        = cuCadd(u, t);
-    A[row * n + k + j + half] = cuCsub(u, t);
-    __syncthreads();                         
+    A[row * n + k + j + half] = cuCsub(u, t);       
 }
 
 // -----------------------------------------------------------------------------
