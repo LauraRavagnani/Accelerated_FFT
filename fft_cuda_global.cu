@@ -25,7 +25,7 @@
 #include "utils_cuda_global.cu"
 
 #define N 512   // must be a power of two
-#define THREADS_PER_BLOCK 128
+//#define THREADS_PER_BLOCK 128
 
 // -----------------------------------------------------------------------------
 // Helper: run one full 1-D FFT pass over every row of d_mat
@@ -36,7 +36,7 @@
 static void fft_rows(cuDoubleComplex *d_mat,
                      unsigned int     n,
                      unsigned int     n_bits,
-                     int             THREADS_PER_BLOCK)
+		    int             THREADS_PER_BLOCK)
 {
     // bit-reverse: each thread handles one element, 2D grid over all rows
     //dim3 blk_br(THREADS_PER_BLOCK);
@@ -60,12 +60,12 @@ static void fft_rows(cuDoubleComplex *d_mat,
 // -----------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-    // if (argc < 2) {
-    //     fprintf(stderr, "Usage: %s <threads_per_block>\n", argv[0]);
-    //     return 1;
-    // }
-    // //const int THREADS_PER_BLOCK = 512;
-    // int THREADS_PER_BLOCK  = atoi(argv[1]);
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <threads_per_block>\n", argv[0]);
+        return 1;
+    }
+    //const int THREADS_PER_BLOCK = 512;
+    int THREADS_PER_BLOCK  = atoi(argv[1]);
 
     const unsigned int n      = N;
     const unsigned int n_bits = (unsigned int)log2((double)n);
@@ -160,7 +160,8 @@ int main(int argc, char *argv[])
     
     validate_fft(h_result, n, fx, fy);
 
-    printf("%.9f\t%.9f\t%.9f", elapsed * 1e-3, time_HtD * 1e-3, time_DtH * 1e-3);
+    //printf("%.9f\t%.9f\t%.9f", elapsed * 1e-3, time_HtD * 1e-3, time_DtH * 1e-3);
+    printf("%.9f\n", elapsed * 1e-3);
 
     // -------------------------------------------------------------------------
     // Cleanup
