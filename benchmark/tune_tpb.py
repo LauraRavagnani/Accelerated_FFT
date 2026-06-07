@@ -5,8 +5,8 @@ import os
 
 EXECUTABLE = "../fft_cuda_global.out"
 ##N_VALUES = [64, 128, 256, 512, 1024, 2048, 4096]
-N_THREADS_PER_BLOCK = [16, 32, 64, 128, 256]
-RUNS = 100
+N_THREADS_PER_BLOCK = [32, 64, 128, 256]
+RUNS = 200
 OUTPUT_CSV = "./results_tune_tpb.csv"
 
 
