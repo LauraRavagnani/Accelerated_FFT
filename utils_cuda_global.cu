@@ -15,29 +15,29 @@
 // Dataset helpers
 // -----------------------------------------------------------------------------
 
-cuDoubleComplex func_Gxy(const double x, const double y,
+cuFloatComplex func_Gxy(const float x, const float y,
                          size_t fx, size_t fy)
 {
-    return make_cuDoubleComplex(
+    return make_cuFloatComplex(
         cos(2.0 * M_PI * fx * x) * cos(2.0 * M_PI * fy * y), 0.0);
 }
 
 struct dataset {
-    double         *grid_x;
-    double         *grid_y;
-    cuDoubleComplex *Gxy;
+    float         *grid_x;
+    float         *grid_y;
+    cuFloatComplex *Gxy;
 };
 
 struct dataset create_dataset(size_t n, size_t fx, size_t fy)
 {
     struct dataset d;
-    d.grid_x = (double*)malloc(n * sizeof(double));
-    d.grid_y = (double*)malloc(n * sizeof(double));
-    d.Gxy    = (cuDoubleComplex*)malloc(n * n * sizeof(cuDoubleComplex));
+    d.grid_x = (float*)malloc(n * sizeof(float));
+    d.grid_y = (float*)malloc(n * sizeof(float));
+    d.Gxy    = (cuFloatComplex*)malloc(n * n * sizeof(cuFloatComplex));
 
     for (int i = 0; i < (int)n; i++) {
-        d.grid_x[i] = (double)i / (double)n;
-        d.grid_y[i] = (double)i / (double)n;
+        d.grid_x[i] = (float)i / (float)n;
+        d.grid_y[i] = (float)i / (float)n;
     }
     for (int i = 0; i < (int)n; i++)
         for (int j = 0; j < (int)n; j++)
@@ -54,9 +54,9 @@ struct dataset create_dataset(size_t n, size_t fx, size_t fy)
 //
 // Each thread reverses the bits of its column index `tid` and, if the
 // reversed index `r` is strictly greater, swaps elements A[row][tid]
-// and A[row][r].  The guard `r > tid` prevents double-swapping.
+// and A[row][r].  The guard `r > tid` prevents float-swapping.
 // -----------------------------------------------------------------------------
-__global__ void kernel_bit_reverse(cuDoubleComplex *A,
+__global__ void kernel_bit_reverse(cuFloatComplex *A,
                                    unsigned int     n,
                                    unsigned int     n_bits)
 {
@@ -72,7 +72,7 @@ __global__ void kernel_bit_reverse(cuDoubleComplex *A,
     }
 
     if (r > tid) {
-        cuDoubleComplex t   = A[row * n + tid];
+        cuFloatComplex t   = A[row * n + tid];
         A[row * n + tid]    = A[row * n + r];
         A[row * n + r]      = t;
     }
@@ -93,7 +93,7 @@ __global__ void kernel_bit_reverse(cuDoubleComplex *A,
 // inter-block ordering is guaranteed because we call cudaDeviceSynchronize()
 // in the host wrapper between stages.
 // -----------------------------------------------------------------------------
-__global__ void kernel_butterfly(cuDoubleComplex       *A,
+__global__ void kernel_butterfly(cuFloatComplex       *A,
                                  unsigned int           n,
                                  unsigned int           m,
                                  unsigned int           step)
@@ -107,17 +107,17 @@ __global__ void kernel_butterfly(cuDoubleComplex       *A,
     unsigned int j =  tid % half;        // position within the group
 
     // twiddle factor  W_n^{j * step} = e^{-2πi * j * step / n}
-    double angle = -2.0 * M_PI * (double)(j * step) / (double)n;
-    double c, sv;
+    float angle = -2.0 * M_PI * (float)(j * step) / (float)n;
+    float c, sv;
     sincos(angle, &sv, &c);
-    cuDoubleComplex w = make_cuDoubleComplex(c, sv);
+    cuFloatComplex w = make_cuFloatComplex(c, sv);
 
     // read both operands before any write (only needed within the block)
-    cuDoubleComplex u = A[row * n + k + j];
-    cuDoubleComplex t = cuCmul(w, A[row * n + k + j + half]);
+    cuFloatComplex u = A[row * n + k + j];
+    cuFloatComplex t = cuCmulf(w, A[row * n + k + j + half]);
 
-    A[row * n + k + j]        = cuCadd(u, t);
-    A[row * n + k + j + half] = cuCsub(u, t);       
+    A[row * n + k + j]        = cuCaddf(u, t);
+    A[row * n + k + j + half] = cuCsubf(u, t);       
 }
 
 // -----------------------------------------------------------------------------
@@ -130,8 +130,8 @@ __global__ void kernel_butterfly(cuDoubleComplex       *A,
 // Using a separate output buffer avoids the need for a tile in shared memory
 // (which would be the standard coalescing trick — excluded here by design).
 // -----------------------------------------------------------------------------
-__global__ void kernel_transpose(const cuDoubleComplex *A,
-                                       cuDoubleComplex *A_T,
+__global__ void kernel_transpose(const cuFloatComplex *A,
+                                       cuFloatComplex *A_T,
                                        unsigned int     n)
 {
     unsigned int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -143,26 +143,26 @@ __global__ void kernel_transpose(const cuDoubleComplex *A,
 // -----------------------------------------------------------------------------
 // Validation helper
 // -----------------------------------------------------------------------------
-void validate_fft(const cuDoubleComplex *h, size_t n, size_t fx, size_t fy)
+void validate_fft(const cuFloatComplex *h, size_t n, size_t fx, size_t fy)
 {
-    const double tol = 1e-3;
+    const float tol = 1e-2;
     int errors = 0;
     for (int i = 0; i < (int)n; i++) {
         for (int j = 0; j < (int)n; j++) {
-            cuDoubleComplex val = h[i * n + j];
-            double diff;
+            cuFloatComplex val = h[i * n + j];
+            float diff;
             bool is_peak = (i == (int)fx       && j == (int)fy)
                         || (i == (int)fx       && j == (int)(n - fy))
                         || (i == (int)(n - fx) && j == (int)fy)
                         || (i == (int)(n - fx) && j == (int)(n - fy));
             if (is_peak)
-                diff = fabs(cuCreal(val) - (double)(n * n) / 4.0);
+                diff = fabs(cuCrealf(val) - (float)(n * n) / 4.0);
             else
-                diff = cuCabs(val);
+                diff = cuCabsf(val);
 
             if (diff > tol) {
                 printf("Error at (%d,%d): re=%.6e  im=%.6e\n",
-                       i, j, cuCreal(val), cuCimag(val));
+                       i, j, cuCrealf(val), cuCimagf(val));
                 errors++;
             }
         }

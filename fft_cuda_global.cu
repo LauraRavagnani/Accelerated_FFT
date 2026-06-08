@@ -33,7 +33,7 @@
 //   - log2(n) kernel_butterfly launches
 //   - one cudaDeviceSynchronize() at the end of the butterfly loop
 // -----------------------------------------------------------------------------
-static void fft_rows(cuDoubleComplex *d_mat,
+static void fft_rows(cuFloatComplex *d_mat,
                      unsigned int     n,
                      unsigned int     n_bits,
 		    int             THREADS_PER_BLOCK)
@@ -68,12 +68,12 @@ int main(int argc, char *argv[])
     int THREADS_PER_BLOCK  = atoi(argv[1]);
 
     const unsigned int n      = N;
-    const unsigned int n_bits = (unsigned int)log2((double)n);
-    const size_t       size   = n * n * sizeof(cuDoubleComplex);
+    const unsigned int n_bits = (unsigned int)log2((float)n);
+    const size_t       size   = n * n * sizeof(cuFloatComplex);
     const size_t       fx = 2, fy = 2;
 
     // tile size for the transpose kernel (keep ≤ 32 so block ≤ 1024 threads)
-    //const int TILE = (THREADS_PER_BLOCK >= 32) ? 32 : (int)sqrt((double)THREADS_PER_BLOCK);
+    //const int TILE = (THREADS_PER_BLOCK >= 32) ? 32 : (int)sqrt((float)THREADS_PER_BLOCK);
     const int TILE = 32;
 
     // -------------------------------------------------------------------------
@@ -93,13 +93,13 @@ int main(int argc, char *argv[])
     // -------------------------------------------------------------------------
     // Host allocation and dataset creation
     // -------------------------------------------------------------------------
-    cuDoubleComplex *h_result = (cuDoubleComplex*)malloc(size);
+    cuFloatComplex *h_result = (cuFloatComplex*)malloc(size);
     struct dataset   data     = create_dataset(n, fx, fy);
 
     // -------------------------------------------------------------------------
     // Device allocation
     // -------------------------------------------------------------------------
-    cuDoubleComplex *d_A, *d_A_T;
+    cuFloatComplex *d_A, *d_A_T;
     cudaMalloc((void**)&d_A,   size);
     cudaMalloc((void**)&d_A_T, size);
 
