@@ -20,7 +20,7 @@ with open(OUTPUT_CSV, "w", newline="") as f:
                 [EXECUTABLE, str(N_tpb)],
                 capture_output=True,
                 text=True,
-                env={**os.environ, "OMP_NUM_THREADS": str(N_tpb)},
+                env={**os.environ, "NUM_THREADS": str(N_tpb)},
             )
             time = proc.stdout.strip()
             writer.writerow([N_tpb, run, time])

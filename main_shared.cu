@@ -278,8 +278,10 @@ void validate_fft(const cuDoubleComplex *h, size_t n, size_t fx, size_t fy)
                 errors++;
             }
         }
-    if (errors == 0) printf("Validation PASSED.\n");
-    else             printf("Validation FAILED: %d error(s).\n", errors);
+    if (errors != 0){
+         printf("Validation FAILED: %d error(s).\n", errors);
+    }
+               
 }
 
 // =============================================================================
@@ -288,10 +290,10 @@ void validate_fft(const cuDoubleComplex *h, size_t n, size_t fx, size_t fy)
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <threads_per_block>\n"
-                        "  TPB must be >= %d (= N/2) for N=%d\n"
-                        "  Recommended: 256 or 512\n",
-                argv[0], N/2, N);
+        // fprintf(stderr, "Usage: %s <threads_per_block>\n"
+        //                 "  TPB must be >= %d (= N/2) for N=%d\n"
+        //                 "  Recommended: 256 or 512\n",
+        //         argv[0], N/2, N);
         return 1;
     }
 
@@ -299,12 +301,12 @@ int main(int argc, char *argv[])
     if (tpb < N / 2) {
         // Still works via the stride loop in kernel_fft_row_shared,
         // but warn the user.
-        printf("Warning: TPB=%d < N/2=%d. "
-               "Multiple iterations per thread in butterfly loop.\n\n",
-               tpb, N/2);
+        // printf("Warning: TPB=%d < N/2=%d. "
+        //        "Multiple iterations per thread in butterfly loop.\n\n",
+        //        tpb, N/2);
     }
     if (tpb > 1024) {
-        fprintf(stderr, "Error: TPB=%d exceeds CUDA max (1024).\n", tpb);
+        // fprintf(stderr, "Error: TPB=%d exceeds CUDA max (1024).\n", tpb);
         return 1;
     }
 
@@ -316,8 +318,8 @@ int main(int argc, char *argv[])
     // Shared memory per block for the FFT kernel
     const size_t smem_size = n * sizeof(cuDoubleComplex);   // 8192 bytes
 
-    printf("2D FFT — shared memory, FP64, N=%d, TPB=%d\n", n, tpb);
-    printf("Shared memory per block: %zu bytes\n\n", smem_size);
+    // printf("2D FFT — shared memory, FP64, N=%d, TPB=%d\n", n, tpb);
+    // printf("Shared memory per block: %zu bytes\n\n", smem_size);
 
     // -------------------------------------------------------------------------
     // Host allocation and dataset
@@ -414,20 +416,22 @@ int main(int argc, char *argv[])
     double bytes   = (4.0 + 2.0) * (double)n * (double)n * sizeof(cuDoubleComplex);
     double sec     = ms_compute * 1e-3;
 
-    printf("Kernel launches    : 3  (vs 21 in global-memory version)\n");
-    printf("Compute time       : %.4f ms\n", ms_compute);
-    printf("HtD transfer       : %.4f ms\n", ms_HtD);
-    printf("DtH transfer       : %.4f ms\n", ms_DtH);
-    printf("\n");
-    printf("GFLOPS             : %.3f  (T4 FP64 peak: 254 GFLOPS)\n",
-           flops / sec / 1e9);
-    printf("Effective BW       : %.2f GB/s  (T4 peak: 320 GB/s)\n",
-           bytes / sec / 1e9);
-    printf("BW utilization     : %.1f%%\n",
-           100.0 * (bytes / sec / 1e9) / 320.0);
-    printf("Arith. intensity   : %.3f FLOP/byte  (ridge: 0.79)\n",
-           flops / bytes);
-    printf("\n");
+    printf("%.9f\n", sec);
+
+    // printf("Kernel launches    : 3  (vs 21 in global-memory version)\n");
+    // printf("Compute time       : %.6f ms\n", ms_compute);
+    // printf("HtD transfer       : %.4f ms\n", ms_HtD);
+    // printf("DtH transfer       : %.4f ms\n", ms_DtH);
+    // printf("\n");
+    // printf("GFLOPS             : %.3f  (T4 FP64 peak: 254 GFLOPS)\n",
+    //        flops / sec / 1e9);
+    // printf("Effective BW       : %.2f GB/s  (T4 peak: 320 GB/s)\n",
+    //        bytes / sec / 1e9);
+    // printf("BW utilization     : %.1f%%\n",
+    //        100.0 * (bytes / sec / 1e9) / 320.0);
+    // printf("Arith. intensity   : %.3f FLOP/byte  (ridge: 0.79)\n",
+    //        flops / bytes);
+    // printf("\n");
 
     validate_fft(h_result, n, fx, fy);
 

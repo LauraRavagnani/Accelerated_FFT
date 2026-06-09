@@ -115,10 +115,10 @@ __global__ void kernel_butterfly(cuDoubleComplex       *A,
 
     // read both operands before any write (only needed within the block)
     cuDoubleComplex u = A[row * n + k + j];
-    cuDoubleComplex t = cuCmulf(w, A[row * n + k + j + half]);
+    cuDoubleComplex t = cuCmul(w, A[row * n + k + j + half]);
 
-    A[row * n + k + j]        = cuCaddf(u, t);
-    A[row * n + k + j + half] = cuCsubf(u, t);       
+    A[row * n + k + j]        = cuCadd(u, t);
+    A[row * n + k + j + half] = cuCsub(u, t);       
 }
 
 // -----------------------------------------------------------------------------
@@ -157,13 +157,13 @@ void validate_fft(const cuDoubleComplex *h, size_t n, size_t fx, size_t fy)
                         || (i == (int)(n - fx) && j == (int)fy)
                         || (i == (int)(n - fx) && j == (int)(n - fy));
             if (is_peak)
-                diff = fabs(cuCrealf(val) - (double)(n * n) / 4.0);
+                diff = fabs(cuCreal(val) - (double)(n * n) / 4.0);
             else
-                diff = cuCabsf(val);
+                diff = cuCabs(val);
 
             if (diff > tol) {
                 printf("Error at (%d,%d): re=%.6e  im=%.6e\n",
-                       i, j, cuCrealf(val), cuCimagf(val));
+                       i, j, cuCreal(val), cuCimag(val));
                 errors++;
             }
         }

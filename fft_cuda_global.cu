@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
     cudaEventRecord(HtD_stop);
     cudaEventSynchronize(HtD_stop);
 
-    double time_HtD;
+    float time_HtD;
     cudaEventElapsedTime(&time_HtD, HtD_start, HtD_stop);
 
 
@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
     cudaEventRecord(ev_stop);
     cudaEventSynchronize(ev_stop);
 
-    double elapsed;
+    float elapsed;
     cudaEventElapsedTime(&elapsed, ev_start, ev_stop);
 
     // -------------------------------------------------------------------------
@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
 
     cudaEventSynchronize(DtH_stop);
 
-    double time_DtH;
+    float time_DtH;
     cudaEventElapsedTime(&time_DtH, DtH_start, DtH_stop);
     
     validate_fft(h_result, n, fx, fy);
