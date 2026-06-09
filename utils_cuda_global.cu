@@ -62,7 +62,7 @@ __global__ void kernel_bit_reverse(cuDoubleComplex *A,
 {
     unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
     unsigned int row = blockIdx.y;
-    //if (tid >= n) return;    // not sure it is useful
+    if (tid >= n) return;    // not sure it is useful
 
     // compute bit-reversal of tid
     unsigned int r = 0;

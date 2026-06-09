@@ -24,8 +24,8 @@
 
 #include "utils_cuda_global.cu"
 
-#define N 512   // must be a power of two
-//#define THREADS_PER_BLOCK 128
+// #define N 512   // must be a power of two
+#define THREADS_PER_BLOCK 128
 
 // -----------------------------------------------------------------------------
 // Helper: run one full 1-D FFT pass over every row of d_mat
@@ -35,8 +35,8 @@
 // -----------------------------------------------------------------------------
 static void fft_rows(cuDoubleComplex *d_mat,
                      unsigned int     n,
-                     unsigned int     n_bits,
-		    int             THREADS_PER_BLOCK)
+                     unsigned int     n_bits)//,
+		    //int             THREADS_PER_BLOCK)
 {
     // bit-reverse: each thread handles one element, 2D grid over all rows
     //dim3 blk_br(THREADS_PER_BLOCK);
@@ -65,7 +65,8 @@ int main(int argc, char *argv[])
         return 1;
     }
     //const int THREADS_PER_BLOCK = 512;
-    int THREADS_PER_BLOCK  = atoi(argv[1]);
+    // int THREADS_PER_BLOCK  = atoi(argv[1]);
+    int N  = atoi(argv[1]);
 
     const unsigned int n      = N;
     const unsigned int n_bits = (unsigned int)log2((double)n);
@@ -123,7 +124,7 @@ int main(int argc, char *argv[])
     // =========================================================================
     // STEP 1 — FFT every row  (kernel_bit_reverse + kernel_butterfly)
     // =========================================================================
-    fft_rows(d_A, n, n_bits, THREADS_PER_BLOCK);
+    fft_rows(d_A, n, n_bits);//, THREADS_PER_BLOCK);
 
     // =========================================================================
     // STEP 2 — Transpose  (kernel_transpose)
@@ -135,7 +136,7 @@ int main(int argc, char *argv[])
     // STEP 3 — FFT every row of transposed matrix  (= column FFTs of original)
     //          (kernel_bit_reverse + kernel_butterfly)
     // =========================================================================
-    fft_rows(d_A_T, n, n_bits, THREADS_PER_BLOCK);
+    fft_rows(d_A_T, n, n_bits);//, THREADS_PER_BLOCK);
 
     cudaEventRecord(ev_stop);
     cudaEventSynchronize(ev_stop);
