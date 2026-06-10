@@ -1,19 +1,13 @@
 // =============================================================================
-// main.cu
-// 2D FFT — global memory only, exactly 3 kernels
-//
 // Algorithm (row-column decomposition):
 //   1. kernel_bit_reverse  on every row of G
 //   2. kernel_butterfly    on every row of G  (log2 N stages)
 //   3. kernel_transpose    G  →  G_T
 //   4. kernel_bit_reverse  on every row of G_T   (= every column of G)
 //   5. kernel_butterfly    on every row of G_T   (log2 N stages)
-//   (optional 6. kernel_transpose G_T → G  if you want row-major output)
 //
 // Compile:
-//   nvcc -O2 -arch=sm_53 -o fft2d main.cu
-// Run:
-//   ./fft2d <threads_per_block>        e.g.   ./fft2d 128
+//   nvcc -O2 -arch=sm_75 -o fft2d main.cu
 // =============================================================================
 
 #include <cuda_runtime.h>
@@ -28,7 +22,7 @@
 #define THREADS_PER_BLOCK 128
 
 // -----------------------------------------------------------------------------
-// Helper: run one full 1-D FFT pass over every row of d_mat
+// Run one full 1-D FFT pass over every row of d_mat
 //   - one kernel_bit_reverse launch
 //   - log2(n) kernel_butterfly launches
 //   - one cudaDeviceSynchronize() at the end of the butterfly loop
@@ -39,19 +33,19 @@ static void fft_rows(cuDoubleComplex *d_mat,
 		    //int             THREADS_PER_BLOCK)
 {
     // bit-reverse: each thread handles one element, 2D grid over all rows
-    //dim3 blk_br(THREADS_PER_BLOCK);
+    // dim3 blk_br(THREADS_PER_BLOCK);
     dim3 n_blocks_br(n / THREADS_PER_BLOCK, n);
     kernel_bit_reverse<<<n_blocks_br, THREADS_PER_BLOCK>>>(d_mat, n, n_bits);
     cudaDeviceSynchronize();
 
     // butterfly stages: each thread handles one pair, 2D grid over all rows
-    //dim3 blk_bf(THREADS_PER_BLOCK);
+    // dim3 blk_bf(THREADS_PER_BLOCK);
     dim3 n_blocks_bf((n / 2) / THREADS_PER_BLOCK, n);
     for (unsigned int s = 1; s <= n_bits; s++) {
         unsigned int m    = 1u << s;
         unsigned int step = n / m;
         kernel_butterfly<<<n_blocks_bf, THREADS_PER_BLOCK>>>(d_mat, n, m, step);
-        cudaDeviceSynchronize();   // inter-block ordering between stages
+        cudaDeviceSynchronize();  
     }
 }
 
@@ -64,7 +58,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Usage: %s <threads_per_block>\n", argv[0]);
         return 1;
     }
-    //const int THREADS_PER_BLOCK = 512;
+    // const int THREADS_PER_BLOCK = 512;
     // int THREADS_PER_BLOCK  = atoi(argv[1]);
     int N  = atoi(argv[1]);
 
@@ -74,7 +68,7 @@ int main(int argc, char *argv[])
     const size_t       fx = 2, fy = 2;
 
     // tile size for the transpose kernel (keep ≤ 32 so block ≤ 1024 threads)
-    //const int TILE = (THREADS_PER_BLOCK >= 32) ? 32 : (int)sqrt((double)THREADS_PER_BLOCK);
+    // const int TILE = (THREADS_PER_BLOCK >= 32) ? 32 : (int)sqrt((double)THREADS_PER_BLOCK);
     const int TILE = 32;
 
     // -------------------------------------------------------------------------
@@ -133,8 +127,7 @@ int main(int argc, char *argv[])
     cudaDeviceSynchronize();
 
     // =========================================================================
-    // STEP 3 — FFT every row of transposed matrix  (= column FFTs of original)
-    //          (kernel_bit_reverse + kernel_butterfly)
+    // STEP 3 — FFT every row of transposed matrix  
     // =========================================================================
     fft_rows(d_A_T, n, n_bits);//, THREADS_PER_BLOCK);
 
@@ -146,9 +139,6 @@ int main(int argc, char *argv[])
 
     // -------------------------------------------------------------------------
     // Copy result back and validate
-    // NOTE: result lives in d_A_T (transposed layout).
-    //       Rows of d_A_T = columns of the 2D FFT output.
-    //       Transpose back with kernel_transpose if row-major order is needed.
     // -------------------------------------------------------------------------
     cudaEventRecord(DtH_start);
     cudaMemcpy(h_result, d_A_T, size, cudaMemcpyDeviceToHost);

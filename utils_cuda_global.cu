@@ -1,15 +1,10 @@
 // =============================================================================
-// utils_cuda_global.cu
-// 2D FFT using global memory only — exactly 3 kernels:
+// 3 kernels:
 //   1. kernel_bit_reverse   : in-place bit-reversal, all rows, 2D grid
 //   2. kernel_butterfly     : all stages × all rows, 2D grid, one launch per stage
 //   3. kernel_transpose     : out-of-place matrix transpose
 // =============================================================================
 
-// #include <cuComplex.h>
-// #include <math.h>
-// #include <stdio.h>
-// #include <stdlib.h>
 
 // -----------------------------------------------------------------------------
 // Dataset helpers
@@ -49,12 +44,10 @@ struct dataset create_dataset(size_t n, size_t fx, size_t fy)
 // -----------------------------------------------------------------------------
 // KERNEL 1 — in-place bit-reversal
 //
-// Grid  : dim3((n + TPB-1)/TPB,  n)   x=position in row, y=row index
+// Grid  : dim3(n/TPB,  n)   x=position in row, y=row index
 // Block : dim3(TPB)
 //
-// Each thread reverses the bits of its column index `tid` and, if the
-// reversed index `r` is strictly greater, swaps elements A[row][tid]
-// and A[row][r].  The guard `r > tid` prevents double-swapping.
+// Each thread reverses the bits of its column index `tid`
 // -----------------------------------------------------------------------------
 __global__ void kernel_bit_reverse(cuDoubleComplex *A,
                                    unsigned int     n,
@@ -62,7 +55,7 @@ __global__ void kernel_bit_reverse(cuDoubleComplex *A,
 {
     unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
     unsigned int row = blockIdx.y;
-    if (tid >= n) return;    // not sure it is useful
+    if (tid >= n) return;    // need only 512 threads (tid from 0 to 511)
 
     // compute bit-reversal of tid
     unsigned int r = 0;
@@ -82,17 +75,12 @@ __global__ void kernel_bit_reverse(cuDoubleComplex *A,
 // -----------------------------------------------------------------------------
 // KERNEL 2 — Cooley-Tukey butterfly, one stage, all rows
 //
-// Grid  : dim3((n/2 + TPB-1)/TPB,  n)   x=butterfly index, y=row index
+// Grid  : dim3((n/2)/TPB,  n)   x=butterfly index, y=row index
 // Block : dim3(TPB)
 //
-// Called once per stage s = 1 … log2(n).
-// m    = 1 << s   : current DFT sub-size
-// step = n / m    : twiddle stride  (W_n^(j*step) = e^{-2πi j/m})
+// Called once per stage s = 1, …, log2(n)
 //
-// Each thread computes ONE butterfly pair (u, t) in global memory.
-// Two __syncthreads() calls bracket the read and write within the block;
-// inter-block ordering is guaranteed because we call cudaDeviceSynchronize()
-// in the host wrapper between stages.
+// Each thread computes one butterfly pair (u, t) in global memory
 // -----------------------------------------------------------------------------
 __global__ void kernel_butterfly(cuDoubleComplex       *A,
                                  unsigned int           n,
@@ -104,7 +92,7 @@ __global__ void kernel_butterfly(cuDoubleComplex       *A,
     unsigned int half = m >> 1;     // since m is a power of 2, divide m by two means to remove the last 0
     if (tid >= n / 2) return;   // need only 256 threads (tid from 0 to 255)
 
-    unsigned int k = (tid / half) * m;   // start of the current group
+    unsigned int k = (tid / half) * m;   // start of the group
     unsigned int j =  tid % half;        // position within the group
 
     // twiddle factor  W_n^{j * step} = e^{-2πi * j * step / n}
@@ -113,7 +101,6 @@ __global__ void kernel_butterfly(cuDoubleComplex       *A,
     sincos(angle, &s, &c);
     cuDoubleComplex w = make_cuDoubleComplex(c, s);
 
-    // read both operands before any write (only needed within the block)
     cuDoubleComplex u = A[row * n + k + j];
     cuDoubleComplex t = cuCmul(w, A[row * n + k + j + half]);
 
@@ -124,12 +111,10 @@ __global__ void kernel_butterfly(cuDoubleComplex       *A,
 // -----------------------------------------------------------------------------
 // KERNEL 3 — out-of-place matrix transpose
 //
-// Grid  : dim3((n + TILE-1)/TILE,  (n + TILE-1)/TILE)
+// Grid  : dim3(n/TILE,  n/TILE)
 // Block : dim3(TILE, TILE)
 //
 // Reads A[row][col] and writes A_T[col][row].
-// Using a separate output buffer avoids the need for a tile in shared memory
-// (which would be the standard coalescing trick — excluded here by design).
 // -----------------------------------------------------------------------------
 __global__ void kernel_transpose(const cuDoubleComplex *A,
                                        cuDoubleComplex *A_T,
@@ -142,7 +127,7 @@ __global__ void kernel_transpose(const cuDoubleComplex *A,
 }
 
 // -----------------------------------------------------------------------------
-// Validation helper
+// Validation
 // -----------------------------------------------------------------------------
 void validate_fft(const cuDoubleComplex *h, size_t n, size_t fx, size_t fy)
 {

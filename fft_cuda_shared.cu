@@ -1,90 +1,91 @@
-#include <cuda_runtime.h>
-#include <cuComplex.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include "utils_cuda_shared.cu"
+// Precomputed twiddle factors in constant memory
+__constant__ float2 c_twiddles[2048];
 
-#define N 512
-#define THREADS_PER_BLOCK 256
-
-/* ------------------------------------------------------------------ */
-/* Helper: FFT on every row using shared memory kernel                */
-/* No tmp buffer needed — result written back in-place                */
-/* ------------------------------------------------------------------ */
-void cuda_fft_smem(cuDoubleComplex *d_mat,
-                   cuDoubleComplex *d_tw,
-                   int n, int n_bits, int TPB)
-{
-    size_t smem_bytes = n * sizeof(cuDoubleComplex);
-    dim3 block(TPB);
-    dim3 grid(n);   // one block per row
-
-    kernel_fft_smem<<<grid, block, smem_bytes>>>(d_mat, d_tw, n, n_bits);
-    cudaDeviceSynchronize();
+void init_twiddles(int max_fft_size) {
+    float2* h_twiddles = new float2[max_fft_size / 2];
+    for (int k = 0; k < max_fft_size / 2; k++) {
+        float angle = -2.0f * M_PI * k / max_fft_size;
+        h_twiddles[k].x = cosf(angle);
+        h_twiddles[k].y = sinf(angle);
+    }
+    cudaMemcpyToSymbol(c_twiddles, h_twiddles,
+                       (max_fft_size / 2) * sizeof(float2));
+    delete[] h_twiddles;
 }
 
-/* ------------------------------------------------------------------ */
-/* Main                                                               */
-/* ------------------------------------------------------------------ */
-int main(int argc, char *argv[])
-{
-    int TPB = (argc > 1) ? atoi(argv[1]) : 256;
+__global__ void fft_stage_optimized(float2* data, int stage, int fft_size) {
+    __shared__ float2 s_data[1024 + 32];  // Padded for bank conflicts
 
-    if (TPB > N) TPB = N;
+    int tid = threadIdx.x;
+    int bid = blockIdx.x;
+    int idx = bid * blockDim.x + tid;
 
-    int    n_bits = (int)log2((double)N);
-    size_t size   = N * N * sizeof(cuDoubleComplex);
-    size_t size_tw= (N/2) * sizeof(cuDoubleComplex);
-    size_t fx = 2, fy = 2;
+    // Coalesced load with padding
+    if (idx < fft_size) {
+        int padded_tid = tid + tid / 32;
+        s_data[padded_tid] = data[idx];
+    }
+    __syncthreads();
 
-    dim3 block2d(TILE_DIM, TILE_DIM);
-    dim3 grid2d(N / TILE_DIM, N / TILE_DIM);
+    int stride = 1 << stage;
+    int num_butterflies_per_block = blockDim.x / (2 * stride);
 
-    cuDoubleComplex *h_X_kl = (cuDoubleComplex*)malloc(size);
-    struct dataset data = create_dataset_cuda(N, fx, fy);
+    for (int iter = 0; iter < (blockDim.x / (2 * stride)); iter++) {
+        int butterfly_idx = tid / (2 * stride);
+        int pos_in_butterfly = tid % stride;
+        int offset = butterfly_idx * (2 * stride);
 
-    cuDoubleComplex *d_Gxy, *d_Gxy_T, *d_tw;
-    cudaMalloc((void**)&d_Gxy,   size);
-    cudaMalloc((void**)&d_Gxy_T, size);
-    cudaMalloc((void**)&d_tw,    size_tw);
+        int i = offset + pos_in_butterfly;
+        int j = i + stride;
 
-    cudaMemcpy(d_Gxy, data.Gxy, size, cudaMemcpyHostToDevice);
+        if (i < blockDim.x && j < blockDim.x) {
+            // Lookup precomputed twiddle
+            int twiddle_idx = pos_in_butterfly * (fft_size / (2 * stride));
+            float2 twiddle = c_twiddles[twiddle_idx];
 
-    int N_b_tw = (N/2 + TPB - 1) / TPB;
+            int padded_i = i + i / 32;
+            int padded_j = j + j / 32;
 
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
+            float2 u = s_data[padded_i];
+            float2 v = s_data[padded_j];
 
-    kernel_precompute_twiddles<<<N_b_tw, TPB>>>(d_tw, N);
-    cudaDeviceSynchronize();
+            // Complex multiply: v * twiddle
+            float2 v_t;
+            v_t.x = v.x * twiddle.x - v.y * twiddle.y;
+            v_t.y = v.x * twiddle.y + v.y * twiddle.x;
 
-    /* step 1: FFT on each row */
-    cuda_fft_smem(d_Gxy, d_tw, N, n_bits, TPB);
+            // Butterfly
+            s_data[padded_i] = make_float2(u.x + v_t.x, u.y + v_t.y);
+            s_data[padded_j] = make_float2(u.x - v_t.x, u.y - v_t.y);
+        }
+        __syncthreads();
+    }
 
-    /* step 2: transpose */
-    matrixTransposition<<<grid2d, block2d>>>(d_Gxy, d_Gxy_T, N);
-    cudaDeviceSynchronize();
-
-    /* step 3: FFT on each column (rows of transposed matrix) */
-    cuda_fft_smem(d_Gxy_T, d_tw, N, n_bits, TPB);
-
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
-
-    float elapsed;
-    cudaEventElapsedTime(&elapsed, start, stop);
-    printf("%.9f\n", elapsed * 1e-3);   // ms → seconds 
-
-    cudaMemcpy(h_X_kl, d_Gxy_T, size, cudaMemcpyDeviceToHost);
-    validate_fft(h_X_kl, N, fx, fy);
-
-    cudaFree(d_Gxy);
-    cudaFree(d_Gxy_T);
-    cudaFree(d_tw);
-    free(h_X_kl);
-
-    return 0;
+    // Coalesced write
+    if (idx < fft_size) {
+        int padded_tid = tid + tid / 32;
+        data[idx] = s_data[padded_tid];
+    }
 }
+
+void compute_fft_optimized(float2* d_data, int fft_size) {
+    int log2n = __builtin_ctz(fft_size);  // Fast log2
+
+    // Initialize twiddles once
+    static bool twiddles_initialized = false;
+    if (!twiddles_initialized) {
+        init_twiddles(fft_size);
+        twiddles_initialized = true;
+    }
+
+    // Bit-reversal (can be fused with stage 0)
+    int threads = 256;
+    int blocks = (fft_size + threads - 1) / threads;
+    // ... bit_reverse_kernel<<<blocks, threads>>>(d_data, fft_size);
+
+    // Execute FFT stages
+    for (int stage = 0; stage < log2n; stage++) {
+        fft_stage_optimized<<<blocks, threads>>>(d_data, stage, fft_size);
+    }
+}
+
