@@ -7,7 +7,7 @@
 //   5. kernel_butterfly    on every row of G_T   (log2 N stages)
 //
 // Compile:
-//   nvcc -O2 -arch=sm_75 -o fft2d main.cu
+//   nvcc -O2 -arch=sm_75 -o fft_cuda_global.out fft_cuda_global.cu
 // =============================================================================
 
 #include <cuda_runtime.h>
@@ -19,7 +19,8 @@
 #include "utils_cuda_global.cu"
 
 // #define N 512   // must be a power of two
-#define THREADS_PER_BLOCK 128
+// #define THREADS_PER_BLOCK 128    // COMMENT WHEN TUNING
+    
 
 // -----------------------------------------------------------------------------
 // Run one full 1-D FFT pass over every row of d_mat
@@ -29,8 +30,30 @@
 // -----------------------------------------------------------------------------
 static void fft_rows(cuDoubleComplex *d_mat,
                      unsigned int     n,
-                     unsigned int     n_bits)//,
-		    //int             THREADS_PER_BLOCK)
+                     unsigned int     n_bits)
+{
+    int THREADS_PER_BLOCK = 128;
+    // bit-reverse: each thread handles one element, 2D grid over all rows
+    // dim3 blk_br(THREADS_PER_BLOCK);
+    dim3 n_blocks_br(n / THREADS_PER_BLOCK, n);
+    kernel_bit_reverse<<<n_blocks_br, THREADS_PER_BLOCK>>>(d_mat, n, n_bits);
+    cudaDeviceSynchronize();
+
+    // butterfly stages: each thread handles one pair, 2D grid over all rows
+    // dim3 blk_bf(THREADS_PER_BLOCK);
+    dim3 n_blocks_bf((n / 2) / THREADS_PER_BLOCK, n);
+    for (unsigned int s = 1; s <= n_bits; s++) {
+        unsigned int m    = 1u << s;
+        unsigned int step = n / m;
+        kernel_butterfly<<<n_blocks_bf, THREADS_PER_BLOCK>>>(d_mat, n, m, step);
+        cudaDeviceSynchronize();  
+    }
+}
+
+static void fft_rows_tune(cuDoubleComplex *d_mat,
+                     unsigned int     n,
+                     unsigned int     n_bits,
+		            int THREADS_PER_BLOCK)
 {
     // bit-reverse: each thread handles one element, 2D grid over all rows
     // dim3 blk_br(THREADS_PER_BLOCK);
@@ -54,14 +77,16 @@ static void fft_rows(cuDoubleComplex *d_mat,
 // -----------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
+    bool tune = true;
+
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <threads_per_block>\n", argv[0]);
         return 1;
     }
     // const int THREADS_PER_BLOCK = 512;
-    // int THREADS_PER_BLOCK  = atoi(argv[1]);
+    
     int N  = atoi(argv[1]);
-
+    
     const unsigned int n      = N;
     const unsigned int n_bits = (unsigned int)log2((double)n);
     const size_t       size   = n * n * sizeof(cuDoubleComplex);
@@ -118,7 +143,12 @@ int main(int argc, char *argv[])
     // =========================================================================
     // STEP 1 — FFT every row  (kernel_bit_reverse + kernel_butterfly)
     // =========================================================================
-    fft_rows(d_A, n, n_bits);//, THREADS_PER_BLOCK);
+    if(tune){
+        int THREADS_PER_BLOCK  = atoi(argv[2]);
+        fft_rows_tune(d_A, n, n_bits, THREADS_PER_BLOCK);
+    }
+    else
+        fft_rows(d_A, n, n_bits);
 
     // =========================================================================
     // STEP 2 — Transpose  (kernel_transpose)
@@ -129,7 +159,12 @@ int main(int argc, char *argv[])
     // =========================================================================
     // STEP 3 — FFT every row of transposed matrix  
     // =========================================================================
-    fft_rows(d_A_T, n, n_bits);//, THREADS_PER_BLOCK);
+    if(tune){
+        int THREADS_PER_BLOCK  = atoi(argv[2]);
+        fft_rows_tune(d_A_T, n, n_bits, THREADS_PER_BLOCK);
+    }
+    else
+        fft_rows(d_A_T, n, n_bits);
 
     cudaEventRecord(ev_stop);
     cudaEventSynchronize(ev_stop);

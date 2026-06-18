@@ -5,8 +5,9 @@ import os
 
 EXECUTABLE = "../fft_cuda_global.out"
 ##N_VALUES = [64, 128, 256, 512, 1024, 2048, 4096]
+N = 512
 N_THREADS_PER_BLOCK = [32, 64, 128, 256]
-RUNS = 200
+RUNS = 100
 OUTPUT_CSV = "./results_tune_tpb.csv"
 
 
@@ -17,7 +18,7 @@ with open(OUTPUT_CSV, "w", newline="") as f:
     for N_tpb in N_THREADS_PER_BLOCK:
         for run in range(RUNS):
             proc = subprocess.run(
-                [EXECUTABLE, str(N_tpb)],
+                [EXECUTABLE, str(N), str(N_tpb)],
                 capture_output=True,
                 text=True,
                 env={**os.environ, "NUM_THREADS": str(N_tpb)},
@@ -27,3 +28,4 @@ with open(OUTPUT_CSV, "w", newline="") as f:
         print(f"Done, threads per block={N_tpb}")
 
 print("Done!")
+
