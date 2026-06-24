@@ -1,3 +1,14 @@
+// Function to get elapsed time in seconds 
+double get_elapsed_time(struct timespec start, struct timespec end) {
+    return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+}
+
+
+// define dataset function (2D)
+double func_Gxy(const double x, const double y, size_t fx, size_t fy){
+	return cos(2 * M_PI * fx * x) * cos(2 * M_PI * fy * y);
+}
+
 // define struct to return multiple objects when create dataset
 struct dataset{
 	double *grid_x;
@@ -188,7 +199,7 @@ void validate_fft(double complex *X, size_t N, size_t fx, size_t fy) {
         }
     }
 
-    if (n_errors == 0){
-        printf("FFT computed successfully!\n");
-    }
+    // if (n_errors == 0){
+    //     printf("FFT computed successfully!\n");
+    // }
 }

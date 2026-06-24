@@ -10,10 +10,8 @@
 // peaks at (+-fx, +-fy) easy to find.
 //
 // Build:
-//   nvcc -O2 fft2d_cufft.cu -lcufft -o fft2d_cufft.out
-//
-// Run:
-//   ./fft2d_cufft.out
+//   nvcc -O2 fft_cufft.cu -lcufft -o fft_cufft.out
+
 
 #include <cuda_runtime.h>
 #include <cufft.h>
