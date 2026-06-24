@@ -5,7 +5,7 @@ import csv
 EXECUTABLE = "../fft_serial.out"
 N_VALUES = [64, 128, 256, 512, 1024, 2048, 4096]
 RUNS = 10
-iterative_mode = False
+iterative_mode = True
 
 if iterative_mode:
     OUTPUT_CSV = "results_iterative_fft.csv"
