@@ -32,7 +32,7 @@ static void fft_rows(cuDoubleComplex *d_mat,
                      unsigned int     n,
                      unsigned int     n_bits)
 {
-    int THREADS_PER_BLOCK = 128;
+    int THREADS_PER_BLOCK = 256;
     // bit-reverse: each thread handles one element, 2D grid over all rows
     // dim3 blk_br(THREADS_PER_BLOCK);
     dim3 n_blocks_br(n / THREADS_PER_BLOCK, n);
@@ -77,7 +77,7 @@ static void fft_rows_tune(cuDoubleComplex *d_mat,
 // -----------------------------------------------------------------------------
 int main(int argc, char *argv[])
 {
-    bool tune = true;
+    bool tune = false;
 
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <threads_per_block>\n", argv[0]);

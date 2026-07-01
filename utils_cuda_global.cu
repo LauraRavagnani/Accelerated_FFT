@@ -105,14 +105,15 @@ __global__ void kernel_butterfly(cuDoubleComplex       *A,
     cuDoubleComplex t = cuCmul(w, A[row * n + k + j + half]);
 
     // dummy compute seeded from real loaded data
-    float acc = (float)cuCreal(u);   // already in a register, no extra load
-    for (int i = 0; i < 1e5; i++) {
-        acc = fmaf(acc, acc, 0.0001f);
-    }
+    // float acc = (float)cuCreal(u);   // already in a register, no extra load
+    // for (int i = 0; i < 1e6; i++) {
+    //     acc = fmaf(acc, acc, 0.0001f);
+    // }
 
     A[row * n + k + j] = cuCadd(u, t);
     // fold acc in so compiler keeps the loop
-    A[row * n + k + j + half] = cuCsub(u, make_cuDoubleComplex(cuCreal(t) - (double)acc * 1e-30, cuCimag(t)));
+    //A[row * n + k + j + half] = cuCsub(u, make_cuDoubleComplex(cuCreal(t) - (double)acc * 1e-30, cuCimag(t)));
+    A[row * n + k + j + half] = cuCsub(u, make_cuDoubleComplex(cuCreal(t), cuCimag(t)));
 }
 
 // -----------------------------------------------------------------------------
