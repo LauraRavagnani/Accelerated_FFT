@@ -9,11 +9,7 @@
 #include <complex.h>
 #include <stdbool.h>
 #include <omp.h>
-<<<<<<< HEAD
 //#include "utils_serial.c"
-=======
-// #include "utils_serial.c"
->>>>>>> cda56ebdf35f9a92e5cd5380580e83fc6bdd9971
 #include "utils_openmp.c"
 
 int main(int argc, char *argv[]) {
@@ -122,10 +118,6 @@ int main(int argc, char *argv[]) {
         create_json("fft_res_omp_shift.json", grid_f_shift, grid_f_shift, X_kl_shift, N);
     }
 
-<<<<<<< HEAD
-=======
-    // validate_fft(X_kl_shift, N, fx, fy);
->>>>>>> cda56ebdf35f9a92e5cd5380580e83fc6bdd9971
     validate_fft(X_kl, N, fx, fy);
 
     free(data.grid_x);

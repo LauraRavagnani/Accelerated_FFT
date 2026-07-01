@@ -31,6 +31,9 @@ def model(x, a, b):
 n_threads = np.unique(df['NThreads'])
 mean_time = df[df['N']==n].groupby('NThreads')['ExecutionTime'].mean().values
 std_time = df[df['N']==n].groupby('NThreads')['ExecutionTime'].std().values
+
+print(np.min(mean_time), n_threads[np.argmin(mean_time)])
+
 (a, b), _ = scipy.optimize.curve_fit(model, n_threads, mean_time, sigma=std_time)
 
 # 2. Create the visualization
@@ -59,4 +62,4 @@ plt.grid(True, linestyle='--', alpha=0.5)
 plt.legend()
 
 # 4. Show the result	
-plt.savefig(f'benchmark_openmp_{n}.png')
+plt.savefig(f'benchmark_openmp_{n}.png', dpi=600)
