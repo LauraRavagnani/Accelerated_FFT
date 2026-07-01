@@ -1,3 +1,12 @@
+<<<<<<< HEAD
+=======
+// Function to get elapsed time in seconds 
+double get_elapsed_time(struct timespec start, struct timespec end) {
+    return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
+}
+
+
+>>>>>>> cda56ebdf35f9a92e5cd5380580e83fc6bdd9971
 // define dataset function (2D)
 double func_Gxy(const double x, const double y, size_t fx, size_t fy){
 	return cos(2 * M_PI * fx * x) * cos(2 * M_PI * fy * y);

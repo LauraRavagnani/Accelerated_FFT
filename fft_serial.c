@@ -1,3 +1,7 @@
+///////////////////////////////////////////////////////////////////
+/////		gcc fft_serial.c -o fft_serial.out -lm		      /////
+///////////////////////////////////////////////////////////////////
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -5,12 +9,12 @@
 #include <complex.h>
 #include <stdbool.h>
 
-#include "utils.c"
+#include "utils_serial.c"
 
 
 
 int main(int argc, char *argv[]){		// put the value of N when run
-	bool iterative_mode = false;
+	bool iterative_mode = true;
 
 	//size_t N = 1024;
 	size_t N = atoi(argv[1]);
