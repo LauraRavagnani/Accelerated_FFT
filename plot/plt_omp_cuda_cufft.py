@@ -69,13 +69,6 @@ color='#db7a57',
 label='cuFFT library',
 zorder=2)
 
-# plt.plot(x, a / x + b, 
-#         linestyle='-',
-#         color=point_color,
-#         alpha=0.3,
-#         linewidth=1, 
-#         label='Amdahl\'s law',
-#         zorder=2)
 
 # 3. Add labels and styling
 plt.title(f'Algorithm Performance Analysis', fontsize=14)

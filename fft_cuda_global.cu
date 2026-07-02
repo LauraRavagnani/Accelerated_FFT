@@ -113,8 +113,14 @@ int main(int argc, char *argv[])
     // -------------------------------------------------------------------------
     // Host allocation and dataset creation
     // -------------------------------------------------------------------------
-    cuDoubleComplex *h_result = (cuDoubleComplex*)malloc(size);
+    // cuDoubleComplex *h_result = (cuDoubleComplex*)malloc(size);
+    cuDoubleComplex *h_result;
+    cudaMallocHost((void**)&h_result, size);
+
     struct dataset   data     = create_dataset(n, fx, fy);
+    cuDoubleComplex *h_Gxy;
+    cudaMallocHost((void**)&h_Gxy, size);
+    memcpy(h_Gxy, data.Gxy, size);
 
     // -------------------------------------------------------------------------
     // Device allocation
@@ -124,7 +130,7 @@ int main(int argc, char *argv[])
     cudaMalloc((void**)&d_A_T, size);
 
     cudaEventRecord(HtD_start);
-    cudaMemcpy(d_A, data.Gxy, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_A, h_Gxy, size, cudaMemcpyHostToDevice);
     cudaEventRecord(HtD_stop);
     cudaEventSynchronize(HtD_stop);
 
@@ -183,11 +189,16 @@ int main(int argc, char *argv[])
 
     float time_DtH;
     cudaEventElapsedTime(&time_DtH, DtH_start, DtH_stop);
+
+    float total_time;
+    cudaEventElapsedTime(&total_time, HtD_start, DtH_stop);
     
     validate_fft(h_result, n, fx, fy);
 
     //printf("%.9f\t%.9f\t%.9f", elapsed * 1e-3, time_HtD * 1e-3, time_DtH * 1e-3);
-    printf("%.9f\n", elapsed * 1e-3);
+    printf("%.9f\t%.9f\t%.9f\t%.9f\n", total_time * 1e-3, elapsed * 1e-3, time_HtD * 1e-3, time_DtH * 1e-3);
+    // printf("%.9f\n", time_HtD * 1e-3);
+    // printf("%.9f\n", time_DtH * 1e-3);
 
     // -------------------------------------------------------------------------
     // Cleanup
@@ -196,10 +207,15 @@ int main(int argc, char *argv[])
     cudaFree(d_A_T);
     cudaEventDestroy(ev_start);
     cudaEventDestroy(ev_stop);
-    free(h_result);
+    cudaEventDestroy(DtH_start);
+    cudaEventDestroy(DtH_stop);
+    cudaEventDestroy(HtD_start);
+    cudaEventDestroy(HtD_stop);
+    cudaFreeHost(h_result);
     free(data.grid_x);
     free(data.grid_y);
     free(data.Gxy);
+    cudaFreeHost(h_Gxy);
 
     return 0;
 }
