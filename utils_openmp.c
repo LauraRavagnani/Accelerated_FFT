@@ -1,12 +1,3 @@
-<<<<<<< HEAD
-=======
-// Function to get elapsed time in seconds 
-double get_elapsed_time(struct timespec start, struct timespec end) {
-    return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
-}
-
-
->>>>>>> cda56ebdf35f9a92e5cd5380580e83fc6bdd9971
 // define dataset function (2D)
 double func_Gxy(const double x, const double y, size_t fx, size_t fy){
 	return cos(2 * M_PI * fx * x) * cos(2 * M_PI * fy * y);
@@ -21,7 +12,7 @@ struct dataset{
 
 
 // create dataset
-struct dataset create_dataset(size_t N, size_t fx, size_t fy){			//return a pointer
+struct dataset create_dataset(size_t N, size_t fx, size_t fy){			
 	struct dataset d;
 
 	d.grid_x = (double*)malloc(N * sizeof(double));
@@ -44,6 +35,7 @@ struct dataset create_dataset(size_t N, size_t fx, size_t fy){			//return a poin
 	return d;
 }
 
+// function to create json file to save fft result (used only for visualization)
 void create_json(char* filename, double* x, double* y, double complex* z, size_t N){
 	FILE* fptr;
 	fptr = fopen(filename, "w");
@@ -60,24 +52,32 @@ void create_json(char* filename, double* x, double* y, double complex* z, size_t
 	fclose(fptr);
 }
 
-
 // Function to get elapsed time in seconds 
 double get_elapsed_time(struct timespec start, struct timespec end) {
     return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 }
 
+// ************************************************************************************************ //
+// the following functions are used to implement the in-place radix-2 Cooley-Tukey algorithm
+// since it it the fastest compared to the out-of-place
+// ************************************************************************************************ //
 
+// ------------------------------------------------------------------ //
+//  bit_reverse_copy 
+// ------------------------------------------------------------------ //
 
-// ── bit_reverse_copy ────────────────────────────────────────────────────────
 // Each iteration writes to A[r] where r is a unique bit-reversal of k.
 // All output indices are distinct → perfectly parallel, no dependencies.
-static void bit_reverse_copy(const double complex *a,
-                              double complex       *A,
-                              size_t                n) {
+static void bit_reverse_copy(const double complex *a, double complex *A, size_t n) {
     size_t n_bits = (size_t)log2(n);
 
-    // Each k maps to a unique r (bit-reversal is a permutation), so
-    // every write targets a different A[r]. No race condition possible.
+    // schedule(static) divides the iteration space evenly before execution,
+    // minimising scheduling overhead because every iteration performs roughly
+    // the same amount of work.
+    //
+    // Each iteration computes the bit-reversed index for one element and writes
+    // to a unique location A[r]. Since bit reversal is a permutation, it's impossible
+    // for two threads to write to the same array element => no race conditions
     #pragma omp parallel for schedule(static)
     for (size_t k = 0; k < n; k++) {
         size_t r   = 0;
@@ -90,18 +90,20 @@ static void bit_reverse_copy(const double complex *a,
     }
 }
 
-// ── precompute_twiddles ─────────────────────────────────────────────────────
-// Called once; subsequent calls are a no-op (twiddle_N == n guard).
+// ------------------------------------------------------------------------- //
+//  Twiddle table - twiddle factors are precomputed to speed up computation
+// ------------------------------------------------------------------------- //
+
 // The build loop is parallel-safe: each k writes to a unique twiddles[k].
 // The guard + malloc must stay sequential — protect with a critical section
-// so only one thread allocates, then all threads fill the table in parallel.
+// so only one thread allocates, then all threads fill the table in parallel
+
 static double complex *twiddles  = NULL;
 static size_t          twiddle_N = 0;
 
 static void precompute_twiddles(size_t n) {
-    // Serialize the check-and-allocate block: if two threads entered
-    // simultaneously both would call malloc and one would leak.
-    // The omp critical directive identifies a section of code that must be executed by a single thread at a time.
+    // The critical directive serialises this section while leaving the rest of
+    // the function parallel
     #pragma omp critical
     {
         if (twiddle_N != n) {
@@ -110,14 +112,18 @@ static void precompute_twiddles(size_t n) {
             twiddle_N = n;
         }
     }
-    // All threads now see the allocated twiddles pointer.
-    // Each k writes to a unique index → safe to parallelise.
+    // Every thread writes to a different twiddles[k]
+    // Static scheduling provides the lowest overhead because all
+    // iterations require identical work
     #pragma omp parallel for schedule(static)
     for (size_t k = 0; k < n / 2; k++)
         twiddles[k] = cexp(-2.0 * I * M_PI * (double)k / (double)n);
 }
 
-// ── iterative_fft ───────────────────────────────────────────────────────────
+// ------------------------------------------------------------------ //
+// in-place radix-2 Cooley-Tukey algorithm 
+// iterative_fft
+// ------------------------------------------------------------------ //
 void iterative_fft(const double complex *a, double complex *A, size_t n) {
 
     precompute_twiddles(n);
@@ -125,8 +131,8 @@ void iterative_fft(const double complex *a, double complex *A, size_t n) {
 
     size_t log_n = (size_t)log2(n);
 
-    // s loop is SEQUENTIAL: stage s reads values written by stage s-1.
-    // Parallelising across stages would produce wrong results.
+    // s loop is sequential: stage s reads values written by stage s-1.
+    // Parallelising across stages would produce wrong results
     for (size_t s = 1; s <= log_n; s++) {
         size_t m    = (size_t)1 << s;   // 2^s elements per butterfly group
         size_t step = n / m;
@@ -183,11 +189,10 @@ double complex* fftshift_2d(const double complex *X, size_t N) {
 
 
 /////////////////////////////////////////////////////////////////////////////////////////////
-///////// Validate the implementation against the expected cosine transform output. /////////
+///////// Validate the implementation against the expected cosine transform output  /////////
 /////////////////////////////////////////////////////////////////////////////////////////////
 
 void validate_fft(double complex *X, size_t N, size_t fx, size_t fy) {
-    //double expected_peak = (double)(N * N) / 4.0;
     double tolerance = 1e-6;
     int n_errors = 0;
     
@@ -208,8 +213,4 @@ void validate_fft(double complex *X, size_t N, size_t fx, size_t fy) {
             };
         }
     }
-
-    // if (n_errors == 0){
-    //     printf("FFT computed successfully!\n");
-    // }
 }

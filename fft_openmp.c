@@ -9,7 +9,7 @@
 #include <complex.h>
 #include <stdbool.h>
 #include <omp.h>
-//#include "utils_serial.c"
+
 #include "utils_openmp.c"
 
 int main(int argc, char *argv[]) {
@@ -112,9 +112,6 @@ int main(int argc, char *argv[]) {
 
     if (N == 8) {
         create_json("fft_res_omp.json", grid_f, grid_f, X_kl, N);
-    }
-
-    if (N == 8) {
         create_json("fft_res_omp_shift.json", grid_f_shift, grid_f_shift, X_kl_shift, N);
     }
 

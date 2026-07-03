@@ -12,13 +12,11 @@
 #include "utils_serial.c"
 
 
-
 int main(int argc, char *argv[]){		// put the value of N when run
-	bool iterative_mode = true;
+	bool iterative_mode = true;			// to compare the two modes
 
-	//size_t N = 1024;
 	size_t N = atoi(argv[1]);
-	size_t fx = 2;
+	size_t fx = 2;						// set frequencies values
 	size_t fy = 2;
 
 	double complex *col = (double complex*)malloc(N * sizeof(double complex));
@@ -28,18 +26,14 @@ int main(int argc, char *argv[]){		// put the value of N when run
 	double *abs = (double*)malloc(N * N * sizeof(double));
 	double *grid_f = (double*)malloc(N * sizeof(double));
 
-
-	/*  
-	* Program main internal variables
-	*/
+	// to measure computation time
 	struct timespec start, t0, t1;
 	double elapsed = 0.0;
-
 
 	// create dataset
 	struct dataset data = create_dataset(N, fx, fy);
 
-	// create json with dataset only for N = 128 (used for visualization)
+	// create json with dataset only for N = 128 (used only for visualization)
 	if(N == 128){
 		create_json("Gxy_vs_xy.json", data.grid_x, data.grid_y, data.Gxy, N);
 	}
@@ -50,7 +44,7 @@ int main(int argc, char *argv[]){		// put the value of N when run
 
 		// perform fft first on rows
 		for(int i=0; i < N; i++){
-			iterative_fft(data.Gxy + i * N, X_k, N);	// inputs are pointers
+			iterative_fft(data.Gxy + i * N, X_k, N);	
 
 			// replace row of original dataset
 			for(int j=0; j < N; j++){
@@ -102,11 +96,6 @@ int main(int argc, char *argv[]){		// put the value of N when run
 
 	for(int i=0; i < N; i++){
 		grid_f[i] = i;
-	}
-
-	// create json with fft result
-	if(N == 8){
-		create_json("fft_prova.json", grid_f, grid_f, X_kl, N);
 	}
 
 	free(data.grid_x);
