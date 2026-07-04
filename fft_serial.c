@@ -17,7 +17,7 @@ int main(int argc, char *argv[]){		// put the value of N when run
 
 	size_t N = atoi(argv[1]);
 	size_t fx = 2;						// set frequencies values
-	size_t fy = 2;
+	size_t fy = 3;
 
 	double complex *col = (double complex*)malloc(N * sizeof(double complex));
 	double complex *X_kl = (double complex*)malloc(N * N * sizeof(double complex));
@@ -89,7 +89,15 @@ int main(int argc, char *argv[]){		// put the value of N when run
 		}
 	}
 
-	
+	// The above step stores the transpose results
+	for(int i=0; i < N; i++){
+        for(int j=i+1; j < N; j++){
+            double complex tmp = X_kl[i * N + j];
+            X_kl[i * N + j]    = X_kl[j * N + i];
+            X_kl[j * N + i]    = tmp;
+        }
+    }
+
 	clock_gettime(CLOCK_MONOTONIC, &t1);
 	elapsed = get_elapsed_time(start, t1);
 	printf("%.6f\n", elapsed);

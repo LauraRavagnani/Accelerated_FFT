@@ -34,7 +34,13 @@ std_time = df[df['N']==n].groupby('NThreads')['ExecutionTime'].std().values
 
 print(np.min(mean_time), n_threads[np.argmin(mean_time)])
 
-(a, b), _ = scipy.optimize.curve_fit(model, n_threads, mean_time, sigma=std_time)
+# to measure the goodness of the fit
+(a, b), _, infodict, _, _ = scipy.optimize.curve_fit(model, n_threads, mean_time, sigma=std_time, full_output=True)
+chi2 = np.sum(infodict['fvec']**2)
+
+n_params = 2  # a, b
+dof = len(n_threads) - n_params
+red_chi2 = chi2 / dof   # reduced chi2
 
 # 2. Create the visualization
 plt.figure(figsize=(10, 6))
@@ -42,7 +48,7 @@ plt.errorbar(n_threads, mean_time, yerr=std_time,
             fmt='o',
             ms=5,
             capsize=3,
-            color=point_color, 
+            color=point_color, # deepskyblue, cornflowerblue, royalblue, slateblue
             label='iterative FFT openMP',
             zorder=2)
 plt.plot(x, a / x + b, 
@@ -50,7 +56,8 @@ plt.plot(x, a / x + b,
         color=point_color,
         alpha=0.3,
         linewidth=1, 
-        label='Amdahl\'s law',
+        label=f"Amdahl's law fit\n"
+             f"$\\chi^2_\\nu$={red_chi2:.3f}",
         zorder=2)
 
 # 3. Add labels and styling

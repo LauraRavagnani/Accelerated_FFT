@@ -52,14 +52,14 @@ void create_json(char* filename, double* x, double* y, double complex* z, size_t
 	fclose(fptr);
 }
 
-// Function to get elapsed time in seconds 
+// Function to get elapsed time in ms 
 double get_elapsed_time(struct timespec start, struct timespec end) {
     return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 }
 
 // ************************************************************************************************ //
 // the following functions are used to implement the in-place radix-2 Cooley-Tukey algorithm
-// since it it the fastest compared to the out-of-place
+// since it is the fastest compared to the out-of-place
 // ************************************************************************************************ //
 
 // ------------------------------------------------------------------ //
@@ -131,23 +131,16 @@ void iterative_fft(const double complex *a, double complex *A, size_t n) {
 
     size_t log_n = (size_t)log2(n);
 
-    // s loop is sequential: stage s reads values written by stage s-1.
+    // s loop is sequential: stage s reads values written by stage s-1
     // Parallelising across stages would produce wrong results
     for (size_t s = 1; s <= log_n; s++) {
         size_t m    = (size_t)1 << s;   // 2^s elements per butterfly group
         size_t step = n / m;
 
-        // k loop: each iteration handles a disjoint block A[k .. k+m-1].
-        // No two k-iterations share any element → safe to parallelise.
-        // The if-guard avoids spawning threads for trivially small stages
-        // (e.g. s=1 has only n/2 groups of 2 — overhead outweighs benefit).
-        #pragma omp parallel for schedule(static) if(n > 4096)
+        // k loop: each iteration handles a disjoint block of A
+        // No two k-iterations share any element => safe to parallelise
+        // #pragma omp parallel for schedule(static) //if(n > 4096)
         for (size_t k = 0; k < n; k += m) {
-
-            // j loop: kept sequential inside each thread.
-            // It's only m/2 iterations (at most n/2 at the last stage),
-            // and splitting it further would cause false-sharing on
-            // adjacent A[k+j] / A[k+j+m/2] pairs.
             for (size_t j = 0; j < m / 2; j++) {
                 double complex w = twiddles[j * step];
                 double complex t = w * A[k + j + m / 2];
@@ -156,46 +149,49 @@ void iterative_fft(const double complex *a, double complex *A, size_t n) {
                 A[k + j + m / 2] = u - t;
             }
         }
-        // Implicit barrier at end of parallel for: all butterflies at
-        // stage s are complete before stage s+1 begins.
     }
 }
 
 
-double complex* fftshift_2d(const double complex *X, size_t N) {
+// double complex* fftshift_2d(const double complex *X, size_t N) {
    
-    double complex *X_shift = (double complex *)malloc(N * N * sizeof(double complex));
+//     double complex *X_shift = (double complex *)malloc(N * N * sizeof(double complex));
 
-    #pragma omp parallel for schedule(static) collapse(2)
-    for (size_t i = 0; i < N/2; i++) {
-        for (size_t j = 0; j < N/2; j++) {
+//     #pragma omp parallel for schedule(static) collapse(2)
+//     for (size_t i = 0; i < N/2; i++) {
+//         for (size_t j = 0; j < N/2; j++) {
 
-            // Q0 (top-left)     -> center of Q3 (bottom-right)
-            X_shift[(i + N/2) * N + (j + N/2)] = X[i * N + j];
+//             // Q0 (top-left)     -> center of Q3 (bottom-right)
+//             X_shift[(i + N/2) * N + (j + N/2)] = X[i * N + j];
 
-            // Q3 (bottom-right) -> center of Q0 (top-left)
-            X_shift[i * N + j]                   = X[(i + N/2) * N + (j + N/2)];
+//             // Q3 (bottom-right) -> center of Q0 (top-left)
+//             X_shift[i * N + j]                   = X[(i + N/2) * N + (j + N/2)];
 
-            // Q1 (top-right)    -> center of Q2 (bottom-left)
-            X_shift[(i + N/2) * N + j]          = X[i * N + (j + N/2)];
+//             // Q1 (top-right)    -> center of Q2 (bottom-left)
+//             X_shift[(i + N/2) * N + j]          = X[i * N + (j + N/2)];
 
-            // Q2 (bottom-left)  -> center of Q1 (top-right)
-            X_shift[i * N + (j + N/2)]          = X[(i + N/2) * N + j];
-        }
-    }
+//             // Q2 (bottom-left)  -> center of Q1 (top-right)
+//             X_shift[i * N + (j + N/2)]          = X[(i + N/2) * N + j];
+//         }
+//     }
 
-    return X_shift;
-}
+//     return X_shift;
+// }
 
 
-/////////////////////////////////////////////////////////////////////////////////////////////
-///////// Validate the implementation against the expected cosine transform output  /////////
-/////////////////////////////////////////////////////////////////////////////////////////////
+// ------------------------------------------------------------------------- //
+// Validate the implementation against the expected cosine transform output  //
+// ------------------------------------------------------------------------- //
 
 void validate_fft(double complex *X, size_t N, size_t fx, size_t fy) {
     double tolerance = 1e-6;
     int n_errors = 0;
-    
+
+    // collapse(2) Flatten the nested loops into one iteration space and distribute the
+    // iterations across threads
+    // reduction(+:n_errors) gives every thread a private copy of n_errors
+    // After the loop finishes, OpenMP automatically sums the private values
+    // into the shared variable
     #pragma omp parallel for schedule(static) collapse(2) reduction(+:n_errors)
     for(int i=0; i<(int)N; i++){
         for(int j=0; j<(int)N; j++){
@@ -207,6 +203,7 @@ void validate_fft(double complex *X, size_t N, size_t fx, size_t fy) {
             }
 
             if(diff > tolerance){
+                // Prevent multiple threads from printing simultaneously
                 #pragma omp critical
                 printf("Failed verification");
                 n_errors += 1;
