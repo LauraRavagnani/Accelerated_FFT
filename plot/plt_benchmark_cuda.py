@@ -6,7 +6,7 @@ import scipy
 
 
 try:
-    df = pd.read_csv('../benchmark/results_cuda_global.csv')
+    df = pd.read_csv('../benchmark/results_cuda.csv')
     
 except Exception as e:
     print(f"Error reading file: {e}")

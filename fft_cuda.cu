@@ -7,7 +7,7 @@
 //   5. kernel_butterfly    on every row of G_T   (log2 N stages)
 //
 // Compile:
-//   nvcc -O2 -arch=sm_75 -o fft_cuda_global.out fft_cuda_global.cu
+//   nvcc -O2 -arch=sm_75 -o fft_cuda.out fft_cuda.cu
 // =============================================================================
 
 #include <cuda_runtime.h>
@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "utils_cuda_global.cu"
+#include "utils_cuda.cu"
 
 // #define N 512   // must be a power of two
 // #define THREADS_PER_BLOCK 128    // COMMENT WHEN TUNING
@@ -195,10 +195,25 @@ int main(int argc, char *argv[])
     
     validate_fft(h_result, n, fx, fy);
 
-    //printf("%.9f\t%.9f\t%.9f", elapsed * 1e-3, time_HtD * 1e-3, time_DtH * 1e-3);
-    printf("%.9f\t%.9f\t%.9f\t%.9f\n", total_time * 1e-3, elapsed * 1e-3, time_HtD * 1e-3, time_DtH * 1e-3);
-    // printf("%.9f\n", time_HtD * 1e-3);
-    // printf("%.9f\n", time_DtH * 1e-3);
+    // -------------------------------------------------------------------------
+    // Throughput
+    // -------------------------------------------------------------------------
+    double total_flops   = fft2d_flop_count(n, n_bits);
+    double compute_gflops = gflops(total_flops, elapsed);      // FFT-only compute
+    double htd_gbps        = gbps(size, time_HtD);              // H2D bandwidth
+    double dth_gbps        = gbps(size, time_DtH);              // D2H bandwidth
+
+ 
+    printf("%.9f\t%.9f\t%.9f\t%.9f\t%.9f\t%.9f\t%.9f\n",
+            total_time * 1e-3,
+            elapsed * 1e-3,
+            time_HtD * 1e-3,
+            time_DtH * 1e-3,
+            compute_gflops,
+            htd_gbps,
+            dth_gbps
+            );
+
 
     // -------------------------------------------------------------------------
     // Cleanup

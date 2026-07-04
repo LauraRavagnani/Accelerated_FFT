@@ -3,16 +3,15 @@ import re
 import csv
 import os
 
-EXECUTABLE = "../main_shared.out"
-N_VALUES = [512, 1024, 2048]
+EXECUTABLE = "../fft_cuda_shared.out"
+N_VALUES = [512, 1024, 2048, 4096]
 #N_THREADS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 RUNS = 100
 OUTPUT_CSV = "results_cuda_shared.csv"
 
-
 with open(OUTPUT_CSV, "w", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(["N", "Run", "ExecutionTime"])
+    writer.writerow(["N", "Run", "TotalTime", "ExecutionTime", "TimeHostToDevice", "TimeDeviceToHost"])
 
     for N in N_VALUES:
         # for nth in N_THREADS:
@@ -23,8 +22,12 @@ with open(OUTPUT_CSV, "w", newline="") as f:
                     text=True,
                     env={**os.environ, "N": str(N)},
                 )
-                time = proc.stdout.strip()
-                writer.writerow([N, run, time])
+                parts = proc.stdout.strip().split()
+
+                total_time, exec_time, time_htd, time_dth = parts[0], parts[1], parts[2], parts[3]
+
+                writer.writerow([N, run, total_time, exec_time, time_htd, time_dth])
+
             print(f"Done N={N}")
 
 print("Done!")

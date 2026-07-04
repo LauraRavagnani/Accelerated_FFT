@@ -5,6 +5,19 @@
 //   3. kernel_transpose     : out-of-place matrix transpose
 // =============================================================================
 
+// Throughput reporting added:
+//   - Compute throughput (GFLOP/s) for the 2D FFT itself, using the
+//     standard complex-radix-2 FFT flop count: a 1D FFT of length N does
+//     log2(N) stages, each with N/2 butterflies; each butterfly is one
+//     complex multiply (6 flops: 4 mul + 2 add/sub) plus one complex add
+//     and one complex subtract (4 flops each), i.e. 10 flops/butterfly,
+//     giving 5*N*log2(N) flops per 1D FFT of length N. A 2D FFT via
+//     row-column decomposition performs 2*N such 1D FFTs (N along rows,
+//     N along columns), so total flops = 2*N * 5*N*log2(N)
+//                                       = 10 * N^2 * log2(N).
+//   - Memory throughput (GB/s) for the H2D and D2H transfers, computed as
+//     bytes_transferred / elapsed_time.
+
 
 // -----------------------------------------------------------------------------
 // Dataset helpers
@@ -163,4 +176,35 @@ void validate_fft(const cuDoubleComplex *h, size_t n, size_t fx, size_t fy)
     }
     if (errors != 0)
         printf("Validation FAILED: %d error(s).\n", errors);
+}
+
+
+// -----------------------------------------------------------------------------
+// Throughput helpers
+// -----------------------------------------------------------------------------
+
+// Total floating point operations for the full 2D FFT (both row and
+// column passes), using the standard 5*N*log2(N) flop count per 1D FFT.
+static double fft2d_flop_count(unsigned int n, unsigned int n_bits)
+{
+    double N = (double)n;
+    double flops_per_1d_fft = 5.0 * N * (double)n_bits;
+    double total_1d_ffts    = 2.0 * N;   // N row FFTs + N column FFTs
+    return flops_per_1d_fft * total_1d_ffts;   // = 10 * N^2 * log2(N)
+}
+
+// GFLOP/s given total flops and elapsed time in milliseconds
+static double gflops(double total_flops, float elapsed_ms)
+{
+    double elapsed_s = (double)elapsed_ms * 1e-3;
+    if (elapsed_s <= 0.0) return 0.0;
+    return (total_flops / elapsed_s) / 1e9;
+}
+
+// GB/s given bytes moved and elapsed time in milliseconds
+static double gbps(size_t bytes, float elapsed_ms)
+{
+    double elapsed_s = (double)elapsed_ms * 1e-3;
+    if (elapsed_s <= 0.0) return 0.0;
+    return ((double)bytes / elapsed_s) / 1e9;
 }

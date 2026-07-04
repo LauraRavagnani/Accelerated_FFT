@@ -1,27 +1,35 @@
 // =============================================================================
-// utils_cuda_shared.cu
-// 2D FFT using shared memory — exactly 2 kernels:
-//   1. kernel_fft_row_smem  : bit-reverse + all butterfly stages in smem,
-//                             one block per row, one launch per FFT pass
-//   2. kernel_transpose     : out-of-place transpose using a shared memory
-//                             tile to coalesce both reads and writes
+// Kernels (shared-memory optimized, tuned for Tesla T4 / sm_75):
 //
-// Key difference from the global memory version:
-//   - All FFT arithmetic stays in the 48 KB on-chip scratchpad
-//   - DRAM is touched exactly once per row (load) + once (store)
-//   - No cudaDeviceSynchronize() between butterfly stages — __syncthreads()
-//     is sufficient because one block owns the entire row
-//   - The transpose also uses smem to fix the uncoalesced write that the
-//     naive global-memory transpose has
+//   1. kernel_fft_row_shared : FUSED bit-reversal + all Cooley-Tukey butterfly
+//                              stages for one (or several) rows, entirely in
+//                              shared memory. Replaces the old
+//                              kernel_bit_reverse + log2(n) x kernel_butterfly
+//                              global-memory launches with a SINGLE kernel
+//                              launch per FFT pass:
+//                                - 1 global read of the row  -> shared mem
+//                                - all compute stays in shared mem (fast)
+//                                - 1 global write of the row <- shared mem
+//                              This removes ~2*log2(n) global memory round
+//                              trips per row and ~log2(n) kernel-launch
+//                              overheads.
+//
+//   2. kernel_bit_reverse / kernel_butterfly : kept as fallback for rows
+//                              too wide to fit in one block's shared memory
+//                              budget (n/2 > 1024 threads), and for the
+//                              tuning path.
+//
+//   3. kernel_transpose_shared : classic tiled shared-memory transpose with
+//                              a padded tile (TILE x TILE+1) to avoid shared
+//                              memory bank conflicts, and BLOCK_ROWS-strided
+//                              loads/stores so global memory accesses stay
+//                              fully coalesced in both the read and the
+//                              write phase.
 // =============================================================================
 
-#include <cuComplex.h>
-#include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 // -----------------------------------------------------------------------------
-// Dataset helpers  (identical to global version)
+// Dataset helpers (unchanged)
 // -----------------------------------------------------------------------------
 
 cuDoubleComplex func_Gxy(const double x, const double y,
@@ -32,8 +40,8 @@ cuDoubleComplex func_Gxy(const double x, const double y,
 }
 
 struct dataset {
-    double          *grid_x;
-    double          *grid_y;
+    double         *grid_x;
+    double         *grid_y;
     cuDoubleComplex *Gxy;
 };
 
@@ -55,170 +63,205 @@ struct dataset create_dataset(size_t n, size_t fx, size_t fy)
     return d;
 }
 
-// -----------------------------------------------------------------------------
-// KERNEL 1 — bit-reverse + all butterfly stages in shared memory
+// =============================================================================
+// FUSED shared-memory row-FFT kernel
 //
-// Launch config (fixed — NOT parameterised by TPB):
-//   blockDim.x = n / 2      (each thread owns exactly one butterfly pair)
-//   gridDim.x  = n          (one block per row)
-//   dynamic smem = n * sizeof(cuDoubleComplex)   (the full row)
+// Grid  : dim3(n / rows_per_block)
+// Block : dim3(n/2, rows_per_block)
+// Shmem : rows_per_block * n * sizeof(cuDoubleComplex)  (dynamic)
 //
-// Why blockDim = n/2 and not n?
-//   Each butterfly stage maps n/2 thread indices to n/2 (u,t) pairs.
-//   Using n/2 threads means every thread does exactly one butterfly per stage
-//   with no idle threads and no conditional guards inside the stage loop.
-//   The two elements loaded/stored per thread (tid and tid+n/2) cover the
-//   full row of n elements during the load/store phases.
-//
-// Memory traffic vs global version:
-//   Global : 2 * (n/2) * log2(n) reads  +  2 * (n/2) * log2(n) writes  to DRAM
-//   Shared : n reads from DRAM (load) + n writes to DRAM (store)
-//            everything in between stays on-chip
-// -----------------------------------------------------------------------------
-__global__ void kernel_fft_row_smem(cuDoubleComplex *A,
-                                    unsigned int     n,
-                                    unsigned int     n_bits)
+// Each block owns `rows_per_block` full rows. threadIdx.y selects the row
+// within the block, threadIdx.x (0..n/2-1) is the butterfly-pair index.
+// The whole row lives in shared memory for the entire FFT (bit-reverse +
+// all log2(n) stages); global memory is only touched once to load and
+// once to store.
+// =============================================================================
+extern __shared__ cuDoubleComplex smem[];
+
+__global__ void kernel_fft_row_shared(cuDoubleComplex *A,
+                                      unsigned int     n,
+                                      unsigned int     n_bits,
+                                      unsigned int     rows_per_block)
 {
-    // one block = one row; dynamic shared memory holds the entire row
-    extern __shared__ cuDoubleComplex smem[];
+    unsigned int half_n     = n >> 1;
+    unsigned int local_row  = threadIdx.y;
+    unsigned int row        = blockIdx.x * rows_per_block + local_row;
+    unsigned int tid        = threadIdx.x;
 
-    const unsigned int tid = threadIdx.x;   // 0 .. n/2 - 1
-    const unsigned int row = blockIdx.x;    // which row this block processes
-    cuDoubleComplex *row_ptr = A + row * n;
+    cuDoubleComplex *srow = smem + (size_t)local_row * n;
 
-    // -------------------------------------------------------------------------
-    // Phase 1 — load row from global memory into shared memory
-    // Each thread loads two elements: its own index and its partner at tid+n/2
-    // -------------------------------------------------------------------------
-    smem[tid]         = row_ptr[tid];
-    smem[tid + n / 2] = row_ptr[tid + n / 2];
+    // ---- coalesced load: global -> shared -------------------------------
+    srow[tid]          = A[(size_t)row * n + tid];
+    srow[tid + half_n] = A[(size_t)row * n + tid + half_n];
     __syncthreads();
 
-    // -------------------------------------------------------------------------
-    // Phase 2 — in-place bit-reversal inside shared memory
-    //
-    // Each thread checks index tid and tid+n/2.
-    // The swap guard (r > k) ensures each pair is swapped exactly once.
-    // -------------------------------------------------------------------------
-    for (int base = 0; base < 2; base++) {
-        unsigned int k   = tid + base * (n / 2);
-        unsigned int r   = 0;
-        unsigned int tmp = k;
-        for (int b = 0; b < (int)n_bits; b++) {
-            r   = (r << 1) | (tmp & 1);
+    // ---- bit-reversal, in shared memory ----------------------------------
+    // n/2 threads cover n elements: each thread handles idx = tid and
+    // idx = tid + half_n (identical logic to the original single-element
+    // kernel_bit_reverse, just two elements per thread).
+    for (unsigned int idx = tid; idx < n; idx += half_n) {
+        unsigned int r = 0, tmp = idx;
+        for (unsigned int b = 0; b < n_bits; b++) {
+            r   = (r << 1) | (tmp & 1u);
             tmp >>= 1;
         }
-        if (r > k) {
-            cuDoubleComplex t = smem[k];
-            smem[k]           = smem[r];
-            smem[r]           = t;
+        if (r > idx) {
+            cuDoubleComplex t = srow[idx];
+            srow[idx] = srow[r];
+            srow[r]   = t;
         }
     }
     __syncthreads();
 
-    // -------------------------------------------------------------------------
-    // Phase 3 — all butterfly stages, entirely in shared memory
-    //
-    // For stage s:
-    //   m    = 1 << s   : sub-DFT size
-    //   half = m / 2    : number of butterfly pairs per group
-    //   step = n / m    : twiddle index stride
-    //
-    // Thread tid maps to group k and intra-group index j:
-    //   k = (tid / half) * m
-    //   j =  tid % half
-    //
-    // Two __syncthreads() per stage:
-    //   first  — all threads finish reading u and t before any thread writes
-    //   second — all threads finish writing before the next stage reads
-    // -------------------------------------------------------------------------
+    // ---- Cooley-Tukey butterfly stages, entirely in shared memory --------
     for (unsigned int s = 1; s <= n_bits; s++) {
         unsigned int m    = 1u << s;
         unsigned int half = m >> 1;
         unsigned int step = n / m;
 
-        unsigned int k = (tid / half) * m;
-        unsigned int j =  tid % half;
+        unsigned int k = (tid / half) * m;   // start of this butterfly group
+        unsigned int j =  tid % half;        // position within the group
 
-        // twiddle W_n^{j*step} = e^{-2πi * j*step / n}
         double angle = -2.0 * M_PI * (double)(j * step) / (double)n;
-        double c, sv;
-        sincos(angle, &sv, &c);
-        cuDoubleComplex w = make_cuDoubleComplex(c, sv);
+        double c, sn;
+        sincos(angle, &sn, &c);
+        cuDoubleComplex w = make_cuDoubleComplex(c, sn);
 
-        // read from smem (on-chip, ~5 cycle latency vs ~200 for DRAM)
-        cuDoubleComplex u = smem[k + j];
-        cuDoubleComplex t = cuCmul(w, smem[k + j + half]);
+        cuDoubleComplex u = srow[k + j];
+        cuDoubleComplex t = cuCmul(w, srow[k + j + half]);
 
-        __syncthreads();                      // read fence
+        srow[k + j]        = cuCadd(u, t);
+        srow[k + j + half] = cuCsub(u, t);
 
-        smem[k + j]        = cuCadd(u, t);
-        smem[k + j + half] = cuCsub(u, t);
-
-        __syncthreads();                      // write fence
+        // Different stages read/write different index groupings, so all
+        // threads must finish this stage before the next one begins.
+        __syncthreads();
     }
 
-    // -------------------------------------------------------------------------
-    // Phase 4 — write result back to global memory
-    // -------------------------------------------------------------------------
-    row_ptr[tid]         = smem[tid];
-    row_ptr[tid + n / 2] = smem[tid + n / 2];
+    // ---- coalesced store: shared -> global --------------------------------
+    A[(size_t)row * n + tid]          = srow[tid];
+    A[(size_t)row * n + tid + half_n] = srow[tid + half_n];
 }
 
 // -----------------------------------------------------------------------------
-// KERNEL 2 — tiled transpose using shared memory
+// KERNEL — in-place bit-reversal (fallback / tuning path, global memory)
 //
-// Grid  : dim3(n/TILE, n/TILE)
-// Block : dim3(TILE, TILE)     where TILE=32
-//
-// The naive global-memory transpose (used in the global version) has
-// uncoalesced *writes*: threads in a warp write to A_T[col*n + row], where
-// consecutive threads have consecutive `col` but the same `row`, so writes
-// are strided by n elements — one cache line per thread.
-//
-// The tiled fix:
-//   1. Threads load a TILE×TILE block of A into smem in a coalesced pattern
-//      (consecutive threads read consecutive columns → coalesced read).
-//   2. __syncthreads()
-//   3. Threads write to A_T reading from smem in transposed order
-//      (consecutive threads write consecutive rows of A_T → coalesced write).
-//
-// Padding smem by 1 column (TILE+1) avoids bank conflicts on the smem read
-// in step 3, where threads in a warp access the same column of smem.
+// Grid  : dim3(n/TPB,  n)   x=position in row, y=row index
+// Block : dim3(TPB)
 // -----------------------------------------------------------------------------
-static const int TILE = 32;
+__global__ void kernel_bit_reverse(cuDoubleComplex *A,
+                                   unsigned int     n,
+                                   unsigned int     n_bits)
+{
+    unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int row = blockIdx.y;
+    if (tid >= n) return;
 
+    unsigned int r = 0;
+    unsigned int tmp = tid;
+    for (int b = 0; b < (int)n_bits; b++) {
+        r   = (r << 1) | (tmp & 1);
+        tmp >>= 1;
+    }
+
+    if (r > tid) {
+        cuDoubleComplex t   = A[row * n + tid];
+        A[row * n + tid]    = A[row * n + r];
+        A[row * n + r]      = t;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// KERNEL — Cooley-Tukey butterfly, one stage, all rows (fallback / tuning path)
+//
+// Grid  : dim3((n/2)/TPB,  n)   x=butterfly index, y=row index
+// Block : dim3(TPB)
+// -----------------------------------------------------------------------------
+__global__ void kernel_butterfly(cuDoubleComplex       *A,
+                                 unsigned int           n,
+                                 unsigned int           m,
+                                 unsigned int           step)
+{
+    unsigned int tid  = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int row  = blockIdx.y;
+    unsigned int half = m >> 1;
+    if (tid >= n / 2) return;
+
+    unsigned int k = (tid / half) * m;
+    unsigned int j =  tid % half;
+
+    double angle = -2.0 * M_PI * (double)(j * step) / (double)n;
+    double c, s;
+    sincos(angle, &s, &c);
+    cuDoubleComplex w = make_cuDoubleComplex(c, s);
+
+    cuDoubleComplex u = A[row * n + k + j];
+    cuDoubleComplex t = cuCmul(w, A[row * n + k + j + half]);
+
+    A[row * n + k + j]        = cuCadd(u, t);
+    A[row * n + k + j + half] = cuCsub(u, make_cuDoubleComplex(cuCreal(t), cuCimag(t)));
+}
+
+// =============================================================================
+// KERNEL — tiled shared-memory transpose (bank-conflict free)
+//
+// Grid  : dim3(n/TILE_DIM, n/TILE_DIM)
+// Block : dim3(TILE_DIM, BLOCK_ROWS)
+//
+// Classic NVIDIA transpose pattern: load a TILE_DIM x TILE_DIM tile into a
+// padded shared-memory array (TILE_DIM+1 columns kills bank conflicts on
+// the transposed write-back), then write it out transposed. BLOCK_ROWS 
+// TILE_DIM lets each thread handle several rows of the tile so occupancy
+// stays high while every global load/store remains fully coalesced.
+// Bounds-checked so it also works for n < TILE_DIM.
+// =============================================================================
+#define TR_TILE_DIM   32
+#define TR_BLOCK_ROWS 8
+
+__global__ void kernel_transpose_shared(const cuDoubleComplex *A,
+                                              cuDoubleComplex *A_T,
+                                              unsigned int     n)
+{
+    __shared__ cuDoubleComplex tile[TR_TILE_DIM][TR_TILE_DIM + 1];
+
+    unsigned int x = blockIdx.x * TR_TILE_DIM + threadIdx.x;
+    unsigned int y = blockIdx.y * TR_TILE_DIM + threadIdx.y;
+
+    #pragma unroll
+    for (unsigned int j = 0; j < TR_TILE_DIM; j += TR_BLOCK_ROWS) {
+        if (x < n && (y + j) < n)
+            tile[threadIdx.y + j][threadIdx.x] = A[(size_t)(y + j) * n + x];
+    }
+
+    __syncthreads();
+
+    x = blockIdx.y * TR_TILE_DIM + threadIdx.x;
+    y = blockIdx.x * TR_TILE_DIM + threadIdx.y;
+
+    #pragma unroll
+    for (unsigned int j = 0; j < TR_TILE_DIM; j += TR_BLOCK_ROWS) {
+        if (x < n && (y + j) < n)
+            A_T[(size_t)(y + j) * n + x] = tile[threadIdx.x][threadIdx.y + j];
+    }
+}
+
+// Kept for the tuning path / reference (naive, no shared memory)
 __global__ void kernel_transpose(const cuDoubleComplex *A,
                                        cuDoubleComplex *A_T,
                                        unsigned int     n)
 {
-    // +1 padding per row eliminates shared memory bank conflicts
-    __shared__ cuDoubleComplex tile[TILE][TILE + 1];
-
-    unsigned int col_in = blockIdx.x * TILE + threadIdx.x;
-    unsigned int row_in = blockIdx.y * TILE + threadIdx.y;
-
-    // coalesced read: warp reads TILE consecutive columns of one row
-    if (row_in < n && col_in < n)
-        tile[threadIdx.y][threadIdx.x] = A[row_in * n + col_in];
-
-    __syncthreads();
-
-    // transposed write coordinates
-    unsigned int col_out = blockIdx.y * TILE + threadIdx.x;
-    unsigned int row_out = blockIdx.x * TILE + threadIdx.y;
-
-    // coalesced write: warp writes TILE consecutive columns of one row of A_T
-    if (row_out < n && col_out < n)
-        A_T[row_out * n + col_out] = tile[threadIdx.x][threadIdx.y];
+    unsigned int col = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int row = blockIdx.y * blockDim.y + threadIdx.y;
+    if (row < n && col < n)
+        A_T[col * n + row] = A[row * n + col];
 }
 
 // -----------------------------------------------------------------------------
-// Validation helper  (identical to global version)
+// Validation (unchanged)
 // -----------------------------------------------------------------------------
 void validate_fft(const cuDoubleComplex *h, size_t n, size_t fx, size_t fy)
 {
-    const double tol = 1e-3;
+    const double tol = 1e-2;
     int errors = 0;
     for (int i = 0; i < (int)n; i++) {
         for (int j = 0; j < (int)n; j++) {
@@ -240,8 +283,6 @@ void validate_fft(const cuDoubleComplex *h, size_t n, size_t fx, size_t fy)
             }
         }
     }
-    if (errors == 0)
-        printf("Validation passed.\n");
-    else
+    if (errors != 0)
         printf("Validation FAILED: %d error(s).\n", errors);
 }

@@ -19,7 +19,7 @@ import scipy
 
 try:
     df1 = pd.read_csv('../benchmark/results_openmp.csv')
-    df2 = pd.read_csv('../benchmark/results_cuda_global.csv')
+    df2 = pd.read_csv('../benchmark/results_cuda.csv')
     df3 = pd.read_csv('../benchmark/results_cufft.csv')
 except Exception as e:
     print(f"Error reading file: {e}")
