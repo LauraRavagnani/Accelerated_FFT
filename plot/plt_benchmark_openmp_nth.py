@@ -5,17 +5,13 @@ import numpy as np
 import pandas as pd
 import scipy
 
-# Parse command-line arguments
 parser = argparse.ArgumentParser(description='Plot benchmark performance for a given N.')
 parser.add_argument('--n', type=int, help='Value of N to filter and plot (e.g. 512)')
 parser.add_argument('--color', type=str, default='blue',
                      help='Color for the data points (e.g. blue, red, #ff5733)')
-# parser.add_argument('--line-color', type=str, default='aquamarine',
-#                      help='Color for the Amdahl\'s law fit line')
 args = parser.parse_args()
 n = args.n
 point_color = args.color
-# line_color = args.line_color
 
 try:
     df = pd.read_csv('../benchmark/results_openmp.csv')
@@ -34,7 +30,6 @@ std_time = df[df['N']==n].groupby('NThreads')['ExecutionTime'].std().values
 
 print(np.min(mean_time), n_threads[np.argmin(mean_time)])
 
-# to measure the goodness of the fit
 (a, b), _, infodict, _, _ = scipy.optimize.curve_fit(model, n_threads, mean_time, sigma=std_time, full_output=True)
 chi2 = np.sum(infodict['fvec']**2)
 
@@ -42,7 +37,6 @@ n_params = 2  # a, b
 dof = len(n_threads) - n_params
 red_chi2 = chi2 / dof   # reduced chi2
 
-# 2. Create the visualization
 plt.figure(figsize=(10, 6))
 plt.errorbar(n_threads, mean_time, yerr=std_time,
             fmt='o',
@@ -60,13 +54,11 @@ plt.plot(x, a / x + b,
              f"$\\chi^2_\\nu$={red_chi2:.3f}",
         zorder=2)
 
-# 3. Add labels and styling
 plt.title(f'Algorithm Performance Analysis, N = {n}', fontsize=14)
 plt.xlabel('Number of threads', fontsize=12)
 plt.ylabel('Execution Time (seconds)', fontsize=12)
 # plt.xscale('log', base=2)
 plt.grid(True, linestyle='--', alpha=0.5)
 plt.legend()
-
-# 4. Show the result	
+	
 plt.savefig(f'benchmark_openmp_{n}.png', dpi=600)

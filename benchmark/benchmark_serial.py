@@ -28,5 +28,4 @@ with open(OUTPUT_CSV, "w", newline="") as f:
             writer.writerow([N, run, time])
 
         print(f"Done N={N}")
-
 print("Done!")

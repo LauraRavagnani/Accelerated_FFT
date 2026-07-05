@@ -5,10 +5,8 @@ import os
 
 EXECUTABLE = "../fft_cufft.out"
 N_VALUES = [512, 1024, 2048, 4096]
-#N_THREADS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 RUNS = 100
 OUTPUT_CSV = "results_cufft.csv"
-
 
 with open(OUTPUT_CSV, "w", newline="") as f:
     writer = csv.writer(f)

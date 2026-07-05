@@ -5,33 +5,28 @@ import matplotlib.pyplot as plt
 INPUT_CSV = "../benchmark/results_cuda_global.csv"
 OUTPUT_PNG = "benchmark_barplot.png"
 
-# Metrics to plot (in the order you want them grouped per N)
-METRICS = ["TimeHostToDevice", "ExecutionTime", "TimeDeviceToHost"]#, "TotalTime"]
-METRIC_LABELS = ["Host -> Device", "Execution", "Device -> Host"]#, "Total"]
+METRICS = ["TimeHostToDevice", "ExecutionTime", "TimeDeviceToHost"]
+METRIC_LABELS = ["Host -> Device", "Execution", "Device -> Host"]
 
-# ---- Load data ----
 df = pd.read_csv(INPUT_CSV)
 
-# Convert seconds -> milliseconds for readability
+# Convert seconds -> milliseconds
 for m in METRICS:
     df[m] = df[m] * 1e3
 
-# ---- Aggregate: mean and std per N ----
 grouped = df.groupby("N")[METRICS].agg(["mean", "std"])
-N_values = grouped.index.to_list()
+N_values = np.unique(df['N'])
 
 means = {m: grouped[m]["mean"].values for m in METRICS}
 stds = {m: grouped[m]["std"].values for m in METRICS}
 
-# ---- Plot ----
-x = np.arange(len(N_values))          # one group per N
+x = np.arange(len(N_values))       
 n_metrics = len(METRICS)
 bar_width = 0.8 / n_metrics
 
 fig, ax = plt.subplots(figsize=(9, 6))
 
 colors = plt.cm.Greens(np.linspace(0.15, 0.85, n_metrics))
-
 
 for i, (metric, label) in enumerate(zip(METRICS, METRIC_LABELS)):
     offset = (i - (n_metrics - 1) / 2) * bar_width
@@ -57,5 +52,4 @@ ax.set_xticklabels([str(n) for n in N_values])
 ax.legend(title="Metric")
 ax.grid(axis="y", linestyle="--", alpha=0.5)
 
-# fig.tight_layout()
 fig.savefig(OUTPUT_PNG, dpi=600)

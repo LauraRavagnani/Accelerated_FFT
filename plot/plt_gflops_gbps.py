@@ -4,14 +4,12 @@ import numpy as np
 import pandas as pd
 import scipy
 
-
 try:
     df = pd.read_csv('../benchmark/results_cuda.csv')
     
 except Exception as e:
     print(f"Error reading file: {e}")
     
-
 n = np.unique(df['N'])
 x = np.arange(512, 4096)
 
@@ -29,7 +27,6 @@ std_gbps2 = df.groupby('N')['GbpsDtH'].std().values
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
  
-# --- Left plot: GFlops vs N ---
 ax1.errorbar(
     n, mean_gflops, yerr=std_gflops,
     marker="o", capsize=4, color="tab:blue", label="GFlops"
@@ -46,7 +43,6 @@ ax1.set_title("Compute throughput vs N")
 ax1.grid(True, linestyle="--", alpha=0.5)
 ax1.legend()
 
-# --- Right plot: GB/s (HtD and DtH) vs N ---
 ax2.errorbar(
     n, mean_gbps1, yerr=std_gbps1,
     marker="o", capsize=4, color="tab:orange", label="Host to Device"

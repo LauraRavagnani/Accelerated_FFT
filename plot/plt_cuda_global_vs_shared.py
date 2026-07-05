@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import scipy
 
-
 try:
     df1 = pd.read_csv('../benchmark/results_cuda.csv')
     df2 = pd.read_csv('../benchmark/results_cuda_shared.csv')
@@ -12,10 +11,7 @@ try:
 except Exception as e:
     print(f"Error reading file: {e}")
     
-
-
 n = np.unique(df1['N'])
-
 x = np.arange(512, 4096)
 
 mean_time1 = df1.groupby('N')['ExecutionTime'].mean().values
@@ -24,7 +20,6 @@ mean_time2 = df2.groupby('N')['ExecutionTime'].mean().values
 std_time1 = df1.groupby('N')['ExecutionTime'].std().values
 std_time2 = df2.groupby('N')['ExecutionTime'].std().values
 
-# 2. Create the visualization
 plt.figure(figsize=(10, 6))
 plt.errorbar(n, mean_time1, yerr=std_time1,
             fmt='o',
@@ -41,23 +36,12 @@ plt.errorbar(n, mean_time2, yerr=std_time2,
             label='shared',
             zorder=2)
 
-
-# 3. Add labels and styling
 plt.title('Benchmark CUDA, TPB = 256', fontsize=14)
-# plt.plot(x, a*x*x*np.log(x), 
-# 			linestyle='-',        # Solid line
-# 			color="lightcoral",      # Red color
-# 			linewidth=1, 
-# 			label='$\\mathcal{O}(N^2\\log N)$',
-# 			zorder=2)
 plt.xlabel('Dataset size N', fontsize=12)
 plt.ylabel('Execution Time (seconds)', fontsize=12)
 plt.xscale('log', base=2)
-# plt.yscale('log')
-# plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
 plt.xticks(n, labels=n)
 plt.grid(True, linestyle='--', alpha=0.5)
 plt.legend()
-
-# 4. Show the result	
+	
 plt.savefig('benchmark_cuda_global_vs_shared.png')

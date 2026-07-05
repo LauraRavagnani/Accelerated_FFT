@@ -9,7 +9,6 @@ N_THREADS = range(1, 29)
 RUNS = 50
 OUTPUT_CSV = "results_openmp.csv"
 
-
 with open(OUTPUT_CSV, "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(["N", "NThreads", "Run", "ExecutionTime"])
