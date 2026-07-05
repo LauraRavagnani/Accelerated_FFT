@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
         free(X_l);
     }
 
-    // The above step stores the transpose results
+    // The above step stores the transpose results, so transpose back
     #pragma omp parallel for schedule(static)
     for (int i = 0; i < (int)N; i++) {
         for (int j = i + 1; j < (int)N; j++) {

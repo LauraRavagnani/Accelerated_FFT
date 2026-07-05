@@ -89,7 +89,7 @@ int main(int argc, char *argv[]){		// put the value of N when run
 		}
 	}
 
-	// The above step stores the transpose results
+	// The above step stores the transpose results, so transpose back
 	for(int i=0; i < N; i++){
         for(int j=i+1; j < N; j++){
             double complex tmp = X_kl[i * N + j];

@@ -52,14 +52,14 @@ void create_json(char* filename, double* x, double* y, double complex* z, size_t
 	fclose(fptr);
 }
 
-// Function to get elapsed time in ms 
+// Function to get elapsed time in seconds
 double get_elapsed_time(struct timespec start, struct timespec end) {
     return (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
 }
 
 // ************************************************************************************************ //
 // the following functions are used to implement the in-place radix-2 Cooley-Tukey algorithm
-// since it is the fastest compared to the out-of-place
+// since it is the fastest algorithm compared to the out-of-place
 // ************************************************************************************************ //
 
 // ------------------------------------------------------------------ //
@@ -137,9 +137,6 @@ void iterative_fft(const double complex *a, double complex *A, size_t n) {
         size_t m    = (size_t)1 << s;   // 2^s elements per butterfly group
         size_t step = n / m;
 
-        // k loop: each iteration handles a disjoint block of A
-        // No two k-iterations share any element => safe to parallelise
-        // #pragma omp parallel for schedule(static) //if(n > 4096)
         for (size_t k = 0; k < n; k += m) {
             for (size_t j = 0; j < m / 2; j++) {
                 double complex w = twiddles[j * step];
@@ -153,34 +150,9 @@ void iterative_fft(const double complex *a, double complex *A, size_t n) {
 }
 
 
-// double complex* fftshift_2d(const double complex *X, size_t N) {
-   
-//     double complex *X_shift = (double complex *)malloc(N * N * sizeof(double complex));
-
-//     #pragma omp parallel for schedule(static) collapse(2)
-//     for (size_t i = 0; i < N/2; i++) {
-//         for (size_t j = 0; j < N/2; j++) {
-
-//             // Q0 (top-left)     -> center of Q3 (bottom-right)
-//             X_shift[(i + N/2) * N + (j + N/2)] = X[i * N + j];
-
-//             // Q3 (bottom-right) -> center of Q0 (top-left)
-//             X_shift[i * N + j]                   = X[(i + N/2) * N + (j + N/2)];
-
-//             // Q1 (top-right)    -> center of Q2 (bottom-left)
-//             X_shift[(i + N/2) * N + j]          = X[i * N + (j + N/2)];
-
-//             // Q2 (bottom-left)  -> center of Q1 (top-right)
-//             X_shift[i * N + (j + N/2)]          = X[(i + N/2) * N + j];
-//         }
-//     }
-
-//     return X_shift;
-// }
-
-
 // ------------------------------------------------------------------------- //
 // Validate the implementation against the expected cosine transform output  //
+// four delta peaks of magnitude N^2/4 at (fx, N-fx, fy, N-fy)               //
 // ------------------------------------------------------------------------- //
 
 void validate_fft(double complex *X, size_t N, size_t fx, size_t fy) {
