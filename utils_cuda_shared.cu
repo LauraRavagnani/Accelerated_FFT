@@ -1,4 +1,4 @@
-// =============================================================================
+/// ----------------------------------------------------------------------------- //
 // Kernels (shared-memory optimized, tuned for Tesla T4 / sm_75):
 //
 //   1. kernel_fft_row_shared : FUSED bit-reversal + all Cooley-Tukey butterfly
@@ -28,20 +28,16 @@
 // =============================================================================
 
 
-// -----------------------------------------------------------------------------
-// Dataset helpers (unchanged)
-// -----------------------------------------------------------------------------
-
-cuDoubleComplex func_Gxy(const double x, const double y,
-                         size_t fx, size_t fy)
-{
-    return make_cuDoubleComplex(
-        cos(2.0 * M_PI * fx * x) * cos(2.0 * M_PI * fy * y), 0.0);
+// ------------------------------------------------------------------------ //
+// Dataset helpers                                                          //
+// ------------------------------------------------------------------------ //
+cuDoubleComplex func_Gxy(const double x, const double y, size_t fx, size_t fy){
+    return make_cuDoubleComplex(cos(2.0 * M_PI * fx * x) * cos(2.0 * M_PI * fy * y), 0.0);
 }
 
 struct dataset {
-    double         *grid_x;
-    double         *grid_y;
+    double *grid_x;
+    double *grid_y;
     cuDoubleComplex *Gxy;
 };
 
@@ -63,64 +59,54 @@ struct dataset create_dataset(size_t n, size_t fx, size_t fy)
     return d;
 }
 
-// =============================================================================
-// FUSED shared-memory row-FFT kernel
-//
-// Grid  : dim3(n / rows_per_block)
-// Block : dim3(n/2, rows_per_block)
-// Shmem : rows_per_block * n * sizeof(cuDoubleComplex)  (dynamic)
-//
-// Each block owns `rows_per_block` full rows. threadIdx.y selects the row
-// within the block, threadIdx.x (0..n/2-1) is the butterfly-pair index.
-// The whole row lives in shared memory for the entire FFT (bit-reverse +
-// all log2(n) stages); global memory is only touched once to load and
-// once to store.
-// =============================================================================
+// ------------------------------------------------------------------------ //
+// kernel - bit-reversal + all butterfly stages                             //
+//                                                                          //
+// optimize the architecture as much as possible                            //                                                                         //
+// Grid  : dim3(n / rows_per_block)                                         //
+// Block : dim3(n/2, rows_per_block)                                        //
+// Shmem : rows_per_block * n * sizeof(cuDoubleComplex)                     //
+//                                                                          //
+// The whole row lives in shared memory for the entire FFT                  //
+// ------------------------------------------------------------------------ //
 extern __shared__ cuDoubleComplex smem[];
 
-__global__ void kernel_fft_row_shared(cuDoubleComplex *A,
-                                      unsigned int     n,
-                                      unsigned int     n_bits,
-                                      unsigned int     rows_per_block)
-{
-    unsigned int half_n     = n >> 1;
+__global__ void kernel_fft_row_shared(cuDoubleComplex *A, unsigned int n, unsigned int n_bits, unsigned int rows_per_block){
+    unsigned int half_n = n >> 1;
     unsigned int local_row  = threadIdx.y;
-    unsigned int row        = blockIdx.x * rows_per_block + local_row;
-    unsigned int tid        = threadIdx.x;
+    unsigned int row = blockIdx.x * rows_per_block + local_row;
+    unsigned int tid = threadIdx.x;
 
-    cuDoubleComplex *srow = smem + (size_t)local_row * n;
+    cuDoubleComplex *srow = smem + local_row * n;
 
-    // ---- coalesced load: global -> shared -------------------------------
-    srow[tid]          = A[(size_t)row * n + tid];
-    srow[tid + half_n] = A[(size_t)row * n + tid + half_n];
+    // load: global -> shared 
+    srow[tid] = A[row * n + tid];
+    srow[tid + half_n] = A[row * n + tid + half_n];
     __syncthreads();
 
-    // ---- bit-reversal, in shared memory ----------------------------------
-    // n/2 threads cover n elements: each thread handles idx = tid and
-    // idx = tid + half_n (identical logic to the original single-element
-    // kernel_bit_reverse, just two elements per thread).
+    // n/2 threads cover n elements: each thread handles idx = tid and idx = tid + half_n 
     for (unsigned int idx = tid; idx < n; idx += half_n) {
         unsigned int r = 0, tmp = idx;
         for (unsigned int b = 0; b < n_bits; b++) {
-            r   = (r << 1) | (tmp & 1u);
+            r = (r << 1) | (tmp & 1u);
             tmp >>= 1;
         }
         if (r > idx) {
             cuDoubleComplex t = srow[idx];
             srow[idx] = srow[r];
-            srow[r]   = t;
+            srow[r] = t;
         }
     }
     __syncthreads();
 
-    // ---- Cooley-Tukey butterfly stages, entirely in shared memory --------
+    // butterfly stages
     for (unsigned int s = 1; s <= n_bits; s++) {
-        unsigned int m    = 1u << s;
+        unsigned int m = 1u << s;
         unsigned int half = m >> 1;
         unsigned int step = n / m;
 
-        unsigned int k = (tid / half) * m;   // start of this butterfly group
-        unsigned int j =  tid % half;        // position within the group
+        unsigned int k = (tid / half) * m;   // start of the group
+        unsigned int j =  tid % half;        // which butterfly within the group
 
         double angle = -2.0 * M_PI * (double)(j * step) / (double)n;
         double c, sn;
@@ -130,25 +116,21 @@ __global__ void kernel_fft_row_shared(cuDoubleComplex *A,
         cuDoubleComplex u = srow[k + j];
         cuDoubleComplex t = cuCmul(w, srow[k + j + half]);
 
-        srow[k + j]        = cuCadd(u, t);
+        srow[k + j] = cuCadd(u, t);
         srow[k + j + half] = cuCsub(u, t);
 
-        // Different stages read/write different index groupings, so all
-        // threads must finish this stage before the next one begins.
+        // all threads must finish this stage before the next one begins.
         __syncthreads();
     }
 
-    // ---- coalesced store: shared -> global --------------------------------
-    A[(size_t)row * n + tid]          = srow[tid];
+    // store: shared -> global
+    A[(size_t)row * n + tid] = srow[tid];
     A[(size_t)row * n + tid + half_n] = srow[tid + half_n];
 }
 
-// -----------------------------------------------------------------------------
-// KERNEL — in-place bit-reversal (fallback / tuning path, global memory)
-//
-// Grid  : dim3(n/TPB,  n)   x=position in row, y=row index
-// Block : dim3(TPB)
-// -----------------------------------------------------------------------------
+/// ----------------------------------------------------------------------- //
+// kernel — in-place bit-reversal (fallback, global memory)                 //
+// ------------------------------------------------------------------------ //
 __global__ void kernel_bit_reverse(cuDoubleComplex *A,
                                    unsigned int     n,
                                    unsigned int     n_bits)
@@ -171,12 +153,9 @@ __global__ void kernel_bit_reverse(cuDoubleComplex *A,
     }
 }
 
-// -----------------------------------------------------------------------------
-// KERNEL — Cooley-Tukey butterfly, one stage, all rows (fallback / tuning path)
-//
-// Grid  : dim3((n/2)/TPB,  n)   x=butterfly index, y=row index
-// Block : dim3(TPB)
-// -----------------------------------------------------------------------------
+// ------------------------------------------------------------------------ //
+// kernel - butterfly (fallback, global memory)                             //
+// ------------------------------------------------------------------------ //
 __global__ void kernel_butterfly(cuDoubleComplex       *A,
                                  unsigned int           n,
                                  unsigned int           m,
@@ -203,82 +182,63 @@ __global__ void kernel_butterfly(cuDoubleComplex       *A,
 }
 
 // =============================================================================
-// KERNEL — tiled shared-memory transpose (bank-conflict free)
+// kernel — tiled shared-memory transpose 
 //
 // Grid  : dim3(n/TILE_DIM, n/TILE_DIM)
 // Block : dim3(TILE_DIM, BLOCK_ROWS)
 //
-// Classic NVIDIA transpose pattern: load a TILE_DIM x TILE_DIM tile into a
-// padded shared-memory array (TILE_DIM+1 columns kills bank conflicts on
-// the transposed write-back), then write it out transposed. BLOCK_ROWS 
-// TILE_DIM lets each thread handle several rows of the tile so occupancy
-// stays high while every global load/store remains fully coalesced.
+// NVIDIA transpose pattern. BLOCK_ROWS TILE_DIM lets each thread handle several rows of the tile
 // Bounds-checked so it also works for n < TILE_DIM.
 // =============================================================================
-#define TR_TILE_DIM   32
-#define TR_BLOCK_ROWS 8
+#define TILE_DIM 32
+#define BLOCK_ROWS 8
 
-__global__ void kernel_transpose_shared(const cuDoubleComplex *A,
-                                              cuDoubleComplex *A_T,
-                                              unsigned int     n)
-{
-    __shared__ cuDoubleComplex tile[TR_TILE_DIM][TR_TILE_DIM + 1];
+__global__ void kernel_transpose_shared(const cuDoubleComplex *A, cuDoubleComplex *A_T, unsigned int n){
+    __shared__ cuDoubleComplex tile[TILE_DIM][TILE_DIM + 1];
 
-    unsigned int x = blockIdx.x * TR_TILE_DIM + threadIdx.x;
-    unsigned int y = blockIdx.y * TR_TILE_DIM + threadIdx.y;
+    unsigned int x = blockIdx.x * TILE_DIM + threadIdx.x;
+    unsigned int y = blockIdx.y * TILE_DIM + threadIdx.y;
 
-    #pragma unroll
-    for (unsigned int j = 0; j < TR_TILE_DIM; j += TR_BLOCK_ROWS) {
+     // #pragma unroll
+    for (unsigned int j = 0; j < TILE_DIM; j += BLOCK_ROWS) {
         if (x < n && (y + j) < n)
-            tile[threadIdx.y + j][threadIdx.x] = A[(size_t)(y + j) * n + x];
+            tile[threadIdx.y + j][threadIdx.x] = A[(y + j) * n + x];
     }
 
     __syncthreads();
 
-    x = blockIdx.y * TR_TILE_DIM + threadIdx.x;
-    y = blockIdx.x * TR_TILE_DIM + threadIdx.y;
+    x = blockIdx.y * TILE_DIM + threadIdx.x;    // transpose block offset
+    y = blockIdx.x * TILE_DIM + threadIdx.y;
 
-    #pragma unroll
-    for (unsigned int j = 0; j < TR_TILE_DIM; j += TR_BLOCK_ROWS) {
-        if (x < n && (y + j) < n)
-            A_T[(size_t)(y + j) * n + x] = tile[threadIdx.x][threadIdx.y + j];
+    // #pragma unroll
+    for (unsigned int j = 0; j < TILE_DIM; j += BLOCK_ROWS) {
+        if (x < n && (y + j) < n){
+            A_T[(y + j) * n + x] = tile[threadIdx.x][threadIdx.y + j];
+        } 
     }
 }
 
-// Kept for the tuning path / reference (naive, no shared memory)
-__global__ void kernel_transpose(const cuDoubleComplex *A,
-                                       cuDoubleComplex *A_T,
-                                       unsigned int     n)
-{
-    unsigned int col = blockIdx.x * blockDim.x + threadIdx.x;
-    unsigned int row = blockIdx.y * blockDim.y + threadIdx.y;
-    if (row < n && col < n)
-        A_T[col * n + row] = A[row * n + col];
-}
-
-// -----------------------------------------------------------------------------
-// Validation (unchanged)
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------- //
+// Validation                                                             //
+// four delta peaks of magnitude N^2/4 at (fx, N-fx, fy, N-fy)            //
+// ---------------------------------------------------------------------- //
 void validate_fft(const cuDoubleComplex *h, size_t n, size_t fx, size_t fy)
 {
-    const double tol = 1e-2;
+    const double tol = 1e-6;
     int errors = 0;
     for (int i = 0; i < (int)n; i++) {
         for (int j = 0; j < (int)n; j++) {
             cuDoubleComplex val = h[i * n + j];
-            double diff;
-            bool is_peak = (i == (int)fx       && j == (int)fy)
-                        || (i == (int)fx       && j == (int)(n - fy))
-                        || (i == (int)(n - fx) && j == (int)fy)
-                        || (i == (int)(n - fx) && j == (int)(n - fy));
-            if (is_peak)
+            double diff = 0.0;
+            if((i == fx && j == fy) || (i == fx && j == (n - fy)) || (i == (n - fx) && j == fy) || (i == (n - fx) && j == (n - fy))){
                 diff = fabs(cuCreal(val) - (double)(n * n) / 4.0);
-            else
+            }
+            else{
                 diff = cuCabs(val);
+            }
 
             if (diff > tol) {
-                printf("Error at (%d,%d): re=%.6e  im=%.6e\n",
-                       i, j, cuCreal(val), cuCimag(val));
+                printf("Error at (%d,%d): re=%.6e  im=%.6e\n", i, j, cuCreal(val), cuCimag(val));
                 errors++;
             }
         }

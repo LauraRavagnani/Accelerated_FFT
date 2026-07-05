@@ -1,6 +1,6 @@
-// ------------------------ //
-// Dataset helpers          //
-// ------------------------ //
+// ------------------------------------------------------------------------ //
+// Dataset helpers                                                          //
+// ------------------------------------------------------------------------ //
 
 cuDoubleComplex func_Gxy(const double x, const double y, size_t fx, size_t fy){
     return make_cuDoubleComplex(cos(2.0 * M_PI * fx * x) * cos(2.0 * M_PI * fy * y), 0.0);
@@ -94,12 +94,12 @@ __global__ void kernel_butterfly(cuDoubleComplex *A, unsigned int n, unsigned in
     A[row * n + k + j + half] = cuCsub(u, make_cuDoubleComplex(cuCreal(t), cuCimag(t)));
 }
 
-// -------------------------------- //
-// KERNEL - matrix transpose        //
-//                                  // 
-// Grid  : dim3(n/TILE,  n/TILE)    //
-// Block : dim3(TILE, TILE)         //
-// -------------------------------- //
+// ------------------------------------------------------------------------ //
+// KERNEL - matrix transpose                                                //
+//                                                                          // 
+// Grid  : dim3(n/TILE,  n/TILE)                                            //
+// Block : dim3(TILE, TILE)                                                 //
+// ------------------------------------------------------------------------ //
 __global__ void kernel_transpose(const cuDoubleComplex *A, cuDoubleComplex *A_T, unsigned int n)
 {
     unsigned int col = blockIdx.x * blockDim.x + threadIdx.x;

@@ -78,9 +78,9 @@ int main(int argc, char *argv[])
     // which exceeds the hardware limit; 
     const int TILE = 32;
 
-    // -------------------- //
-    // Timing               //
-    // -------------------- //
+    // ---------------------------------------------------------------------- //
+    // Timing                                                                 //
+    // ---------------------------------------------------------------------- //
     cudaEvent_t ev_start, ev_stop;
     cudaEvent_t HtD_start, HtD_stop;
     cudaEvent_t DtH_start, DtH_stop;
@@ -92,9 +92,9 @@ int main(int argc, char *argv[])
     cudaEventCreate(&DtH_start);
     cudaEventCreate(&DtH_stop);
 
-    // -------------------------------------------------------------------------
-    // Host allocation and dataset creation
-    // -------------------------------------------------------------------------
+    // ---------------------------------------------------------------------- //
+    // Host allocation and dataset creation                                   //
+    // ---------------------------------------------------------------------- //
     cuDoubleComplex *h_result;
     cudaMallocHost((void**)&h_result, size);    // Allocating as pinned memory lets cudaMemcpy use direct DMA,
                                                 // giving higher H2D/D2H bandwidth
@@ -104,11 +104,11 @@ int main(int argc, char *argv[])
     cudaMallocHost((void**)&h_Gxy, size);
     memcpy(h_Gxy, data.Gxy, size);
 
-    // --------------------- //
-    // Device allocation     //
-    // --------------------- //
+    // ---------------------------------------------------------------------- //
+    // Device allocation                                                      //
+    // ---------------------------------------------------------------------- //
     cuDoubleComplex *d_Gxy, *d_Gxy_T;
-    cudaMalloc((void**)&d_Gxy,   size);
+    cudaMalloc((void**)&d_Gxy, size);
     cudaMalloc((void**)&d_Gxy_T, size);
 
     cudaEventRecord(HtD_start);
@@ -119,9 +119,9 @@ int main(int argc, char *argv[])
     float time_HtD;
     cudaEventElapsedTime(&time_HtD, HtD_start, HtD_stop);
 
-    // ------------------------------------------ //
-    // Grid / block configs for the transpose     //
-    // ------------------------------------------ //
+    // ---------------------------------------------------------------------- //
+    // Grid / block configs for the transpose                                 //
+    // ---------------------------------------------------------------------- //
     dim3 blk_tr(TILE, TILE);
     dim3 grd_tr(n / TILE, n / TILE);
 
@@ -155,9 +155,9 @@ int main(int argc, char *argv[])
     float elapsed;
     cudaEventElapsedTime(&elapsed, ev_start, ev_stop);
 
-    // --------------------------------- //
-    // Copy result back and validate     //
-    // --------------------------------- //
+    // ---------------------------------------------------------------------- //
+    // Copy result back and validate                                          //
+    // ---------------------------------------------------------------------- //
     cudaEventRecord(DtH_start);
     cudaMemcpy(h_result, d_Gxy, size, cudaMemcpyDeviceToHost);
     cudaEventRecord(DtH_stop);
@@ -172,9 +172,9 @@ int main(int argc, char *argv[])
     
     validate_fft(h_result, n, fx, fy);
 
-    // ------------------------------------ //
-    // Measure Throughput and Bandwidth     //
-    // ------------------------------------ //
+    // ---------------------------------------------------------------------- //
+    // Measure Throughput and Bandwidth                                       //
+    // ---------------------------------------------------------------------- //
     double compute_gflops = gflops(n, elapsed);      
     double htd_gbps        = gbps(size, time_HtD);              
     double dth_gbps        = gbps(size, time_DtH);             
