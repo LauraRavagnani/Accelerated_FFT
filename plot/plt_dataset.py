@@ -12,7 +12,7 @@ with open('../Gxy_vs_xy.json', 'r') as f:
     y = [item['y'] for item in data]
     Gxy = [item['z'] for item in data]
 
-    colors = ["#4a6fa5", 'white', "#db7a57"]
+    colors = ["#ac7bbd", 'white', "#cdb94e"]
     cmap = col.LinearSegmentedColormap.from_list('custom', colors, N=256)
 
     fig = plt.figure(figsize=(12, 8))
@@ -40,6 +40,6 @@ with open('../Gxy_vs_xy.json', 'r') as f:
             'linestyle': '--',
             'linewidth': 0.8
         })
-    plt.savefig('dataset.png', dpi=600)
+    plt.savefig('dataset.png', dpi=300)
 
     
