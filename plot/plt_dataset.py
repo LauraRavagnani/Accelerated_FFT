@@ -23,7 +23,7 @@ with open('../Gxy_vs_xy.json', 'r') as f:
                             np.array(Gxy).reshape((int(np.sqrt(len(Gxy))), int(np.sqrt(len(Gxy))))),
                             cmap=cmap, antialiased=True, shade=True)
 
-    ax.set_title('$G(x, y) = \\cos(2\\pi f_x x) \\cos(3\\pi f_y y)$')
+    ax.set_title('$G(x, y) = \\cos(2\\pi f_x x) \\cos(2\\pi f_y y)$')
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     ax.set_zlabel('G(x, y)')
