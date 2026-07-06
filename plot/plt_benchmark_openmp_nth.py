@@ -28,9 +28,6 @@ n_threads = np.unique(df['NThreads'])
 mean_time = df[df['N']==n].groupby('NThreads')['ExecutionTime'].mean().values
 std_time = df[df['N']==n].groupby('NThreads')['ExecutionTime'].std().values
 
-mean_time*=1e3
-std_time*=1e3
-
 print(np.min(mean_time), n_threads[np.argmin(mean_time)])
 
 (a, b), _, infodict, _, _ = scipy.optimize.curve_fit(model, n_threads, mean_time, sigma=std_time, full_output=True)
@@ -59,7 +56,7 @@ plt.plot(x, a / x + b,
 
 plt.title(f'Algorithm Performance Analysis, N = {n}', fontsize=14)
 plt.xlabel('Number of threads', fontsize=12)
-plt.ylabel('Execution Time (ms)', fontsize=12)
+plt.ylabel('Execution Time (seconds)', fontsize=12)
 # plt.xscale('log', base=2)
 plt.grid(True, linestyle='--', alpha=0.5)
 plt.legend(fontsize=14)
