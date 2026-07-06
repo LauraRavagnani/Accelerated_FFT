@@ -68,7 +68,7 @@ plt.ylabel('Execution Time (seconds)', fontsize=12)
 plt.xscale('log', base=2)
 plt.xticks(N, labels=N)
 plt.grid(True, linestyle='--', alpha=0.5)
-plt.legend()
+plt.legend(fontsize=14)
 
 # 4. Show the result	
 plt.savefig('serial.png', dpi=300)
