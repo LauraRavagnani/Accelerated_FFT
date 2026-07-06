@@ -62,7 +62,7 @@ plt.plot(x, a2*x*x*np.log(x),
 
 
 # 3. Add labels and styling
-plt.title('Algorithm Performance Analysis', fontsize=14)
+plt.title('Out-of-place vs In-place Performance', fontsize=14)
 plt.xlabel('Matrix Size (N)', fontsize=12)
 plt.ylabel('Execution Time (seconds)', fontsize=12)
 plt.xscale('log', base=2)
