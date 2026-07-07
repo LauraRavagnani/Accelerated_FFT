@@ -46,10 +46,10 @@ for i, (metric, label) in enumerate(zip(METRICS, METRIC_LABELS)):
 ax.set_xlabel("Matrix Size (N)")
 ax.set_ylabel("Time (ms)")
 ax.set_yscale("log")  # timings span more than an order of magnitude across N
-ax.set_title("CUDA FFT Timing Breakdown vs N (mean +/- std)")
+ax.set_title("CUDA FFT Timing Breakdown (mean +/- std)")
 ax.set_xticks(x)
 ax.set_xticklabels([str(n) for n in N_values])
 ax.legend(fontsize=14)
 ax.grid(axis="y", linestyle="--", alpha=0.5)
 
-fig.savefig(OUTPUT_PNG, dpi=600)
+fig.savefig(OUTPUT_PNG, dpi=300)
