@@ -28,6 +28,21 @@ std_time2 = df2.groupby('N')['ExecutionTime'].std().values
 a1, _ = scipy.optimize.curve_fit(model, N, mean_time1, sigma=std_time1)
 a2, _ = scipy.optimize.curve_fit(model, N, mean_time2, sigma=std_time2)
 
+# Best-fit values
+fit1 = model(N, *a1)
+fit2 = model(N, *a2)
+
+# Chi-squared
+chi2_1 = np.sum(((mean_time1 - fit1) / std_time1)**2)
+chi2_2 = np.sum(((mean_time2 - fit2) / std_time2)**2)
+
+# Degrees of freedom
+ndof = len(N) - len(a1)   # one fitted parameter
+
+# Reduced chi-squared
+chi2_red_1 = chi2_1 / ndof
+chi2_red_2 = chi2_2 / ndof
+
 # 2. Create the visualization
 plt.figure(figsize=(10, 6))
 plt.errorbar(N, mean_time1, yerr=std_time1,
@@ -49,14 +64,14 @@ plt.plot(x, a1*x*x*np.log(x),
         color="#ac7bbd",      # Red color
         alpha=0.5,
         linewidth=1, 
-        label='$\\mathcal{O}(N^2\\log N)$',
+        label='$\\mathcal{O}(N^2\\log N)$,' f'$\\chi^2_\\nu={chi2_red_1:.2f}$',
         zorder=2)
 plt.plot(x, a2*x*x*np.log(x), 
         linestyle='-',        # Solid line
         color="#cdb94e",      # Red color
         alpha=0.5,
         linewidth=1, 
-        label='$\\mathcal{O}(N^2\\log N)$',
+        label='$\\mathcal{O}(N^2\\log N)$,' f'$\\chi^2_\\nu={chi2_red_2:.2f}$',
         zorder=1)
 
 
