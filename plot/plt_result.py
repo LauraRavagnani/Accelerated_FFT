@@ -12,8 +12,9 @@ x = [item['x'] for item in data]
 y = [item['y'] for item in data]
 z = [item['z'] for item in data]
 
-fig = plt.figure(figsize=(12, 8))
+fig = plt.figure(figsize=(12, 8), facecolor='white')
 ax = fig.add_subplot(111, projection='3d')
+ax.set_facecolor('white')
 
 # Draw the 'heads' of the stems
 ax.scatter(x, y, z, color="#ac7bbd", s=50, label='FFT Peaks')
@@ -29,6 +30,11 @@ ax.set_ylabel('Frequency $f_y$')
 ax.set_zlabel('Magnitude')
 ax.set_zlim(0, 17)
 ax.view_init(elev=25, azim=50)
+
+for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+    axis.pane.fill = True
+    axis.pane.set_facecolor((1, 1, 1, 1))  # white RGBA
+    axis.pane.set_edgecolor('lightgray')
 
 plt.savefig('result.png', dpi=300)
 
