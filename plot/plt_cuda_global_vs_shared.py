@@ -12,7 +12,7 @@ except Exception as e:
     print(f"Error reading file: {e}")
     
 n = np.unique(df1['N'])
-x = np.arange(512, 4096)
+x = np.arange(512, 2048)
 
 mean_time1 = df1.groupby('N')['ExecutionTime'].mean().values
 mean_time2 = df2.groupby('N')['ExecutionTime'].mean().values
@@ -21,14 +21,14 @@ std_time1 = df1.groupby('N')['ExecutionTime'].std().values
 std_time2 = df2.groupby('N')['ExecutionTime'].std().values
 
 plt.figure(figsize=(10, 6))
-plt.errorbar(n, mean_time1, yerr=std_time1,
+plt.errorbar(n[:3], mean_time1[:3], yerr=std_time1[:3],
             fmt='o',
             ms=5,
             capsize=3,
             color='teal', 
             label='global memory',
             zorder=2)
-plt.errorbar(n, mean_time2, yerr=std_time2,
+plt.errorbar(n[:3], mean_time2[:3], yerr=std_time2[:3],
             fmt='^',
             ms=5,
             capsize=3,
@@ -40,7 +40,7 @@ plt.title('Benchmark CUDA, TPB = 256', fontsize=14)
 plt.xlabel('Matrix size (N)', fontsize=12)
 plt.ylabel('Execution Time (seconds)', fontsize=12)
 plt.xscale('log', base=2)
-plt.xticks(n, labels=n)
+plt.xticks(n[:3], labels=n[:3])
 plt.grid(True, linestyle='--', alpha=0.5)
 plt.legend(fontsize=14)
 	
