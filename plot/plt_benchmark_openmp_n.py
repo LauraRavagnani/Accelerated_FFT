@@ -37,12 +37,12 @@ plt.errorbar(n, mean_time, yerr=std_time,
             ms=5,
             capsize=3,
             linewidth=1,
-            color=point_color, 
+            color='#5983c2', # '#5983c2'
             label='iterative FFT openMP',
             zorder=2)
 plt.plot(x, a*x*x*np.log(x), 
         linestyle='-',        # Solid line
-        color=point_color,      # Red color
+        color='#5983c2',      # Red color
         alpha=0.5,
         linewidth=1, 
         label='$\\mathcal{O}(N^2\\log N)$',

@@ -26,14 +26,15 @@ plt.errorbar(n, mean_time, yerr=std_time,
             fmt='o',
             ms=5,
             capsize=3,
-            color='red', 
-            #label='iterative FFT openMP',
+            color='#5da272', 
+            label='FFT CUDA',
             zorder=2)
 
 plt.title('Benchmark CUDA, TPB = 256', fontsize=14)
 plt.plot(x, a*x*x*np.log(x), 
 			linestyle='-',        
-			color="lightcoral",     
+			color="#5da272",
+            alpha=0.5,     
 			linewidth=1, 
 			label='$\\mathcal{O}(N^2\\log N)$',
 			zorder=2)
@@ -42,6 +43,6 @@ plt.ylabel('Execution Time (seconds)', fontsize=12)
 plt.xscale('log', base=2)
 plt.xticks(n, labels=n)
 plt.grid(True, linestyle='--', alpha=0.5)
-plt.legend()
+plt.legend(fontsize=14)
 
-plt.savefig('benchmark_cuda.png')
+plt.savefig('benchmark_cuda.png', dpi=300)
