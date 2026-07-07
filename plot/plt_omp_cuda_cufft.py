@@ -30,7 +30,7 @@ plt.errorbar(n, mean_time1, yerr=std_time1,
             capsize=3,
             linewidth=1,
             color='#5983c2', 
-            label='openMP iterative',
+            label='OpenMP iterative',
             zorder=2)
 
 plt.errorbar(n, mean_time2, yerr=std_time2,
@@ -43,20 +43,20 @@ plt.errorbar(n, mean_time2, yerr=std_time2,
             zorder=2)
 
 plt.errorbar(n, mean_time3, yerr=std_time3,
-fmt='s--',
-ms=5,
-capsize=3,
-linewidth=1,
-color='#db7a57', 
-label='cuFFT library',
-zorder=2)
+            fmt='s--',
+            ms=5,
+            capsize=3,
+            linewidth=1,
+            color='#db7a57', 
+            label='cuFFT library',
+            zorder=2)
 
 plt.title(f'Algorithm Performance Analysis', fontsize=14)
-plt.xlabel('Dataset size N', fontsize=12)
+plt.xlabel('Matrix size (N)', fontsize=12)
 plt.ylabel('Execution Time (seconds)', fontsize=12)
 plt.xscale('log', base=2)
 plt.xticks(n, labels=n)
 plt.grid(True, linestyle='--', alpha=0.5)
-plt.legend()
+plt.legend(fontsize=14)
 	
-plt.savefig(f'benchmark_omp_cuda_cufft.png', dpi=600)
+plt.savefig(f'benchmark_omp_cuda_cufft.png', dpi=300)
