@@ -20,19 +20,33 @@ try:
 except Exception as e:
     print(f"Error reading file: {e}")
 
+x = np.arange(512, 4096)
+
+def model(x, a):
+    return a * x**2 * np.log(x)
+
 n = np.unique(df['N'])
 mean_time = df[df['NThreads']==n_threads].groupby('N')['ExecutionTime'].mean().values
 std_time = df[df['NThreads']==n_threads].groupby('N')['ExecutionTime'].std().values
 
+a, _ = scipy.optimize.curve_fit(model, n, mean_time, sigma=std_time)
+
 plt.figure(figsize=(10, 6))
 plt.errorbar(n, mean_time, yerr=std_time,
-            fmt='o--',
+            fmt='o',
             ms=5,
             capsize=3,
             linewidth=1,
             color=point_color, 
             label='iterative FFT openMP',
             zorder=2)
+plt.plot(x, a*x*x*np.log(x), 
+        linestyle='-',        # Solid line
+        color=point_color,      # Red color
+        alpha=0.5,
+        linewidth=1, 
+        label='$\\mathcal{O}(N^2\\log N)$',
+        zorder=2)
 
 
 plt.title(f'Algorithm Performance Analysis, NTh = {n_threads}', fontsize=14)
@@ -41,6 +55,6 @@ plt.ylabel('Execution Time (seconds)', fontsize=12)
 plt.xscale('log', base=2)
 plt.xticks(n, labels=n)
 plt.grid(True, linestyle='--', alpha=0.5)
-plt.legend()
+plt.legend(fontsize=14)
 	
-plt.savefig(f'benchmark_openmp_{n_threads}.png', dpi=600)
+plt.savefig(f'benchmark_openmp_{n_threads}.png', dpi=300)
