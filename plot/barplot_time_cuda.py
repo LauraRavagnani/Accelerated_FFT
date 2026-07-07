@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-INPUT_CSV = "../benchmark/results_cuda_global.csv"
+INPUT_CSV = "../benchmark/results_cuda.csv"
 OUTPUT_PNG = "benchmark_barplot.png"
 
 METRICS = ["TimeHostToDevice", "ExecutionTime", "TimeDeviceToHost"]
@@ -26,7 +26,7 @@ bar_width = 0.8 / n_metrics
 
 fig, ax = plt.subplots(figsize=(9, 6))
 
-colors = plt.cm.Greens(np.linspace(0.15, 0.85, n_metrics))
+colors = plt.cm.YlGn(np.linspace(0.15, 0.85, n_metrics))
 
 for i, (metric, label) in enumerate(zip(METRICS, METRIC_LABELS)):
     offset = (i - (n_metrics - 1) / 2) * bar_width
@@ -43,10 +43,10 @@ for i, (metric, label) in enumerate(zip(METRICS, METRIC_LABELS)):
         zorder=2
     )
 
-ax.set_xlabel("N (FFT size)")
+ax.set_xlabel("Matrix Size (N)")
 ax.set_ylabel("Time (ms)")
 ax.set_yscale("log")  # timings span more than an order of magnitude across N
-ax.set_title("CUDA FFT Timing Breakdown vs N (mean +/- std over runs)")
+ax.set_title("CUDA FFT Timing Breakdown vs N (mean +/- std)")
 ax.set_xticks(x)
 ax.set_xticklabels([str(n) for n in N_values])
 ax.legend(title="Metric")

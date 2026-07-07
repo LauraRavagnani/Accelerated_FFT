@@ -78,6 +78,8 @@ static void bit_reverse_copy(const double complex *a, double complex *A, size_t 
     // Each iteration computes the bit-reversed index for one element and writes
     // to a unique location A[r]. Since bit reversal is a permutation, it's impossible
     // for two threads to write to the same array element => no race conditions
+
+    
     #pragma omp parallel for schedule(static)
     for (size_t k = 0; k < n; k++) {
         size_t r   = 0;
