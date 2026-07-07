@@ -25,23 +25,23 @@ plt.errorbar(n, mean_time1, yerr=std_time1,
             fmt='o',
             ms=5,
             capsize=3,
-            color='red', 
-            label='global',
+            color='teal', 
+            label='global memory',
             zorder=2)
 plt.errorbar(n, mean_time2, yerr=std_time2,
-            fmt='o',
+            fmt='^',
             ms=5,
             capsize=3,
-            color='blue', 
-            label='shared',
+            color='yellowgreen', 
+            label='shared memory',
             zorder=2)
 
 plt.title('Benchmark CUDA, TPB = 256', fontsize=14)
-plt.xlabel('Dataset size N', fontsize=12)
+plt.xlabel('Matrix size (N)', fontsize=12)
 plt.ylabel('Execution Time (seconds)', fontsize=12)
 plt.xscale('log', base=2)
 plt.xticks(n, labels=n)
 plt.grid(True, linestyle='--', alpha=0.5)
-plt.legend()
+plt.legend(fontsize=14)
 	
-plt.savefig('benchmark_cuda_global_vs_shared.png')
+plt.savefig('benchmark_cuda_global_vs_shared.png', dpi=300)
