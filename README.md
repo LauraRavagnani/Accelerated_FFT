@@ -17,7 +17,7 @@ The project compares multiple optimization strategies, including:
 
 **Input Dataset**
 
-<img src="plot/dataset.png" width="350">
+<img src="plot/dataset.png" width="500">
 
 </td>
 
@@ -25,7 +25,7 @@ The project compares multiple optimization strategies, including:
 
 **FFT Output**
 
-<img src="plot/result.png" width="350">
+<img src="plot/result.png" width="500">
 
 </td>
 </tr>
