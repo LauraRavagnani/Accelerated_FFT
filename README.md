@@ -11,6 +11,14 @@ The project compares multiple optimization strategies, including:
 - NVIDIA cuFFT library
 - Performance benchmarking and scaling analysis
 
+## Performance Comparison
+
+The figure below compares the execution time of the different FFT implementations. The custom CUDA implementations outperform the CPU versions, while NVIDIA's cuFFT library provides the highest performance.
+
+<p align="center">
+  <img src="plot/benchmark_omp_cuda_cufft.png" alt="Performance comparison between OpenMP, CUDA and cuFFT" width="700"/>
+</p>
+
 ---
 
 ## Overview
