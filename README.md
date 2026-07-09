@@ -11,6 +11,26 @@ The project compares multiple optimization strategies, including:
 - NVIDIA cuFFT library
 - Performance benchmarking and scaling analysis
 
+<table align="center">
+<tr>
+<td align="center">
+
+**Input Dataset**
+
+<img src="plot/dataset.png" width="350">
+
+</td>
+
+<td align="center">
+
+**FFT Output**
+
+<img src="plot/result.png" width="350">
+
+</td>
+</tr>
+</table>
+
 ## Performance Comparison
 
 The figure below compares the execution time of the different FFT implementations. The custom CUDA implementations outperform the CPU versions, while NVIDIA's cuFFT library provides the highest performance.
